@@ -1,4 +1,5 @@
 import gymnasium
+import ale_py
 import argparse
 from tensorboardX import SummaryWriter
 import cv2
@@ -29,7 +30,7 @@ def build_single_env(env_name, image_size, seed):
     env = gymnasium.make(env_name, full_action_space=False, render_mode="rgb_array", frameskip=1)
     env = env_wrapper.SeedEnvWrapper(env, seed=seed)
     env = env_wrapper.MaxLast2FrameSkipWrapper(env, skip=4)
-    env = gymnasium.wrappers.ResizeObservation(env, shape=image_size)
+    env = gymnasium.wrappers.ResizeObservation(env, shape=(image_size, image_size))
     env = env_wrapper.LifeLossInfo(env)
     return env
 

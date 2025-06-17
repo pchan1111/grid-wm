@@ -222,7 +222,7 @@ class WorldModel(nn.Module):
         self.stoch_dim = 32
         self.stoch_flattened_dim = self.stoch_dim*self.stoch_dim
         self.use_amp = True
-        self.tensor_dtype = torch.bfloat16 if self.use_amp else torch.float32
+        self.tensor_dtype = torch.float16 if self.use_amp else torch.float32
         self.imagine_batch_size = -1
         self.imagine_batch_length = -1
 
@@ -271,7 +271,7 @@ class WorldModel(nn.Module):
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     def encode_obs(self, obs):
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             embedding = self.encoder(obs)
             post_logits = self.dist_head.forward_post(embedding)
             sample = self.stright_throught_gradient(post_logits, sample_mode="random_sample")
@@ -279,7 +279,7 @@ class WorldModel(nn.Module):
         return flattened_sample
 
     def calc_last_dist_feat(self, latent, action):
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             temporal_mask = get_subsequent_mask(latent)
             dist_feat = self.storm_transformer(latent, action, temporal_mask)
             last_dist_feat = dist_feat[:, -1:]
@@ -289,7 +289,7 @@ class WorldModel(nn.Module):
         return prior_flattened_sample, last_dist_feat
 
     def predict_next(self, last_flattened_sample, action, log_video=True):
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             dist_feat = self.storm_transformer.forward_with_kv_cache(last_flattened_sample, action)
             prior_logits = self.dist_head.forward_prior(dist_feat)
 
@@ -379,7 +379,7 @@ class WorldModel(nn.Module):
         self.train()
         batch_size, batch_length = obs.shape[:2]
 
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             # encoding
             embedding = self.encoder(obs)
             post_logits = self.dist_head.forward_post(embedding)

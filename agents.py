@@ -41,7 +41,7 @@ class ActorCriticAgent(nn.Module):
         self.lambd = lambd
         self.entropy_coef = entropy_coef
         self.use_amp = True
-        self.tensor_dtype = torch.bfloat16 if self.use_amp else torch.float32
+        self.tensor_dtype = torch.float16 if self.use_amp else torch.float32
 
         self.symlog_twohot_loss = SymLogTwoHotLoss(255, -20, 20)
 
@@ -113,7 +113,7 @@ class ActorCriticAgent(nn.Module):
     @torch.no_grad()
     def sample(self, latent, greedy=False):
         self.eval()
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             logits = self.policy(latent)
             dist = distributions.Categorical(logits=logits)
             if greedy:
@@ -131,7 +131,7 @@ class ActorCriticAgent(nn.Module):
         Update policy and value model
         '''
         self.train()
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             logits, raw_value = self.get_logits_raw_value(latent)
             dist = distributions.Categorical(logits=logits[:, :-1])
             log_prob = dist.log_prob(action)
