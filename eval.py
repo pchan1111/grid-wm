@@ -35,7 +35,7 @@ def process_visualize(img):
 def build_single_env(env_name, image_size):
     env = gymnasium.make(env_name, full_action_space=False, render_mode="rgb_array", frameskip=1)
     env = env_wrapper.MaxLast2FrameSkipWrapper(env, skip=4)
-    env = gymnasium.wrappers.ResizeObservation(env, shape=image_size)
+    env = gymnasium.wrappers.ResizeObservation(env, shape=(image_size, image_size))
     return env
 
 
@@ -91,6 +91,7 @@ def eval_episodes(num_episode, env_name, max_steps, num_envs, image_size,
                     final_rewards.append(sum_reward[i])
                     sum_reward[i] = 0
                     if len(final_rewards) == num_episode:
+                        print(final_rewards)
                         print("Mean reward: " + colorama.Fore.YELLOW + f"{np.mean(final_rewards)}" + colorama.Style.RESET_ALL)
                         return np.mean(final_rewards)
 
@@ -150,7 +151,15 @@ if __name__ == "__main__":
             agent=agent
         )
         results.append([step, episode_avg_return])
-    with open(f"eval_result/{args.run_name}.csv", "w") as fout:
-        fout.write("step, episode_avg_return\n")
-        for step, episode_avg_return in results:
-            fout.write(f"{step},{episode_avg_return}\n")
+    try:
+        with open(f"eval_result/{args.run_name}.csv", "w") as fout:
+            fout.write("step, episode_avg_return\n")
+            for step, episode_avg_return in results:
+                fout.write(f"{step},{episode_avg_return}\n")
+
+    except FileNotFoundError:
+        os.makedirs("eval_result", exist_ok=True)
+        with open(f"eval_result/{args.run_name}.csv", "w") as fout:
+            fout.write("step, episode_avg_return\n")
+            for step, episode_avg_return in results:
+                fout.write(f"{step},{episode_avg_return}\n")
