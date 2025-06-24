@@ -89,6 +89,8 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
     # but when the max_steps is large, you can use parallel envs to speed up
     vec_env = build_vec_env(env_name, image_size, num_envs=num_envs, seed=seed)
     print("Current env: " + colorama.Fore.YELLOW + f"{env_name}" + colorama.Style.RESET_ALL)
+    cuda_device = os.environ.get("CUDA_VISIBLE_DEVICES")
+    print("Current CUDA device: " + colorama.Fore.YELLOW + f"{cuda_device}" + colorama.Style.RESET_ALL)
 
     # reset envs and variables
     sum_reward = np.zeros(num_envs)
