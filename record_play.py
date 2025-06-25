@@ -28,103 +28,109 @@ from sub_models.world_models import WorldModel, MSELoss
 def process_visualize(img):
     img = img.astype('uint8')
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    img = cv2.resize(img, (640, 640))
+    # img = cv2.resize(img, (640, 640))
     return img
 
 
-def build_single_env(env_name, image_size):
+def build_single_env(env_name, image_size, use_native_resolution):
     env = gymnasium.make(env_name, full_action_space=False, render_mode="rgb_array", frameskip=1)
     env = env_wrapper.MaxLast2FrameSkipWrapper(env, skip=4)
-    env = gymnasium.wrappers.ResizeObservation(env, shape=(image_size, image_size))
+    # --- MODIFIED: Conditionally apply the ResizeObservation wrapper. ---
+    if not use_native_resolution:
+        env = gymnasium.wrappers.ResizeObservation(env, shape=(image_size, image_size))
     return env
 
-def build_vec_env(env_name, image_size, num_envs):
-    # lambda pitfall refs to: https://python.plainenglish.io/python-pitfalls-with-variable-capture-dcfc113f39b7
-    def lambda_generator(env_name, image_size):
-        return lambda: build_single_env(env_name, image_size)
-    env_fns = []
-    env_fns = [lambda_generator(env_name, image_size) for i in range(num_envs)]
-    vec_env = gymnasium.vector.AsyncVectorEnv(env_fns=env_fns)
-    return vec_env
-
-
-
-
-def record_episode(env_name, image_size, num_envs, output_path,
-                   world_model: WorldModel, agent: agents.ActorCriticAgent):
+def record_episode(env_name, image_size, num_episodes, output_path,
+                   world_model: WorldModel, agent: agents.ActorCriticAgent, use_native_resolution: bool):
     
     print("Recording episode for env: " + colorama.Fore.YELLOW + f"{env_name}" + colorama.Style.RESET_ALL)
-    print("Output video will be saved to: " + colorama.Fore.CYAN + f"{output_path}" + colorama.Style.RESET_ALL)
+    print(f"Collecting {num_episodes} episodes. Native resolution: {use_native_resolution}")
+    print("Output video(s) will be based on: " + colorama.Fore.CYAN + f"{output_path}" + colorama.Style.RESET_ALL)
 
-    # 録画用のディレクトリを作成
     output_dir = os.path.dirname(output_path)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
     world_model.eval()
     agent.eval()
-    vec_env = build_vec_env(env_name, image_size, num_envs=num_envs)
-    print("Current env: " + colorama.Fore.YELLOW + f"{env_name}" + colorama.Style.RESET_ALL)
-    sum_reward = np.zeros(num_envs)
-    current_obs, current_info = vec_env.reset()
-    context_obs = deque(maxlen=16)
-    context_action = deque(maxlen=16)
 
-    obs_for_video = []
-    obs_for_video.append(process_visualize(current_obs))
+    # Use a single environment
+    env = build_single_env(env_name, image_size, use_native_resolution)
+    
+    all_rewards = []
 
-    final_rewards = []
-    # for total_steps in tqdm(range(max_steps//num_envs)):
-    while True:
-        # sample part >>>
-        with torch.no_grad():
-            if len(context_action) == 0:
-                action = vec_env.action_space.sample()
-                print("action shape:", action.shape)
-            else:
-                context_latent = world_model.encode_obs(torch.cat(list(context_obs), dim=1))
-                print("context_latent shape:", context_latent.shape)
-                model_context_action = np.stack(list(context_action), axis=1)
-                model_context_action = torch.Tensor(model_context_action).cuda()
-                print("model_context_action shape:", model_context_action.shape)
-                prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action)
-                print("prior_flattened_sample shape:", prior_flattened_sample.shape)
-                print("last_dist_feat shape:", last_dist_feat.shape)
-                action = agent.sample_as_env_action(
-                    torch.cat([prior_flattened_sample, last_dist_feat], dim=-1),
-                    greedy=False
-                )
-
-
-        context_obs.append(rearrange(torch.Tensor(current_obs).cuda(), "B H W C -> B 1 C H W")/255)
-        context_action.append(action)
-
-        obs, reward, done, truncated, info = vec_env.step(action)
-        print("obs shape:", obs.shape)
-        print("reward shape:", reward.shape)
-        obs_for_video.append(process_visualize(obs[0]))
-
-        done_flag = np.logical_or(done, truncated)
-        if done_flag.any():
-            for i in range(num_envs):
-                if done_flag[i]:
-                    final_rewards.append(sum_reward[i])
+    for episode_idx in tqdm(range(num_episodes)):
         
-        sum_reward += reward
-        current_obs = obs
-        current_info = info
+        # Reset environment and collectors for each episode
+        current_obs, info = env.reset()
+        sum_reward = 0
+        
+        obs_for_video = [process_visualize(current_obs)]
+        
+        context_obs = deque(maxlen=16)
+        context_action = deque(maxlen=16)
+        
+        done = False
+        truncated = False
 
-        if len(final_rewards) == num_envs:
-            print(final_rewards)
-            # 動画を保存
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            video_path = output_path
-            video_writer = cv2.VideoWriter(video_path, fourcc, 30.0, (640, 640))
-            for frame in obs_for_video:
-                video_writer.write(frame)
-            video_writer.release()
-            print("Video saved to: " + colorama.Fore.CYAN + f"{video_path}" + colorama.Style.RESET_ALL)
-            return np.mean(final_rewards)
+        while not done and not truncated:
+            with torch.no_grad():
+                # If native resolution is used, the observation must be resized for the model.
+                # Otherwise, the observation from the env is already the correct size.
+                if use_native_resolution:
+                    model_input_obs = cv2.resize(current_obs, (image_size, image_size), interpolation=cv2.INTER_AREA)
+                else:
+                    model_input_obs = current_obs
+
+                if len(context_action) == 0:
+                    action_int = env.action_space.sample()
+                else:
+                    context_latent = world_model.encode_obs(torch.cat(list(context_obs), dim=1))
+                    model_context_action = np.stack(list(context_action), axis=1)
+                    model_context_action = torch.Tensor(model_context_action).cuda()
+                    
+                    prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action)
+                    
+                    action_tensor = agent.sample(
+                        torch.cat([prior_flattened_sample, last_dist_feat], dim=-1),
+                        greedy=True
+                    )
+                    action_int = action_tensor.item()
+
+                action_for_context = np.array([action_int])
+
+            # The model's context always needs the resized observation.
+            context_obs.append(rearrange(torch.Tensor(model_input_obs).unsqueeze(0).cuda(), "B H W C -> B 1 C H W") / 255)
+            context_action.append(action_for_context)
+
+            # The environment steps and returns the next observation (native or resized).
+            obs, reward, done, truncated, info = env.step(action_int)
+            
+            # Save the observation from the environment directly for the video.
+            obs_for_video.append(process_visualize(obs))
+            sum_reward += reward
+            current_obs = obs
+
+        # Episode finished, save video
+        print(f"Episode {episode_idx+1} finished with reward: {sum_reward}")
+        all_rewards.append(sum_reward)
+        
+        # Use the extension from the provided output_path argument
+        output_basename, output_ext = os.path.splitext(os.path.basename(output_path))
+        video_filename = f"{output_basename}_episode_{episode_idx}{output_ext}"
+        episode_video_path = os.path.join(output_dir, video_filename)
+        
+        # The video size is determined by the frame resolution (native or resized)
+        frame_h, frame_w, _ = obs_for_video[0].shape
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(episode_video_path, fourcc, 30.0, (frame_w, frame_h))
+        for frame in obs_for_video:
+            video_writer.write(frame)
+        video_writer.release()
+        print("Video for episode " + str(episode_idx+1) + " saved to: " + colorama.Fore.CYAN + f"{episode_video_path}" + colorama.Style.RESET_ALL)
+
+    env.close()
+    return np.mean(all_rewards) if all_rewards else 0
 
 
 if __name__ == "__main__":
@@ -140,6 +146,9 @@ if __name__ == "__main__":
     parser.add_argument("-env_name", type=str, required=True)
     parser.add_argument("-run_name", type=str, required=True)
     parser.add_argument("-output_path", type=str, required=True)
+    parser.add_argument("-num_videos", type=int, required=True)
+    # --- ADDED: New argument to choose resolution ---
+    parser.add_argument("-native_resolution", action="store_true", help="If set, records in native resolution. Otherwise, records in model's image_size (e.g., 64x64).")
     args = parser.parse_args()
     conf = load_config(args.config_path)
     print(colorama.Fore.RED + str(args) + colorama.Style.RESET_ALL)
@@ -150,8 +159,10 @@ if __name__ == "__main__":
 
     # build and load model/agent
     import train
-    dummy_env = build_single_env(args.env_name, conf.BasicSettings.ImageSize)
+    # This dummy env is now only used to get the action dimension, so it's fine.
+    dummy_env = build_single_env(args.env_name, conf.BasicSettings.ImageSize, args.native_resolution)
     action_dim = dummy_env.action_space.n
+    dummy_env.close()
     world_model = train.build_world_model(conf, action_dim)
     agent = train.build_agent(conf, action_dim)
     root_path = f"ckpt/{args.run_name}"
@@ -161,7 +172,7 @@ if __name__ == "__main__":
     steps = [int(path.split("_")[-1].split(".")[0]) for path in pathes]
     steps.sort()
     steps = steps[-1:]
-    print(steps)
+    print(f"Evaluating checkpoint for step: {steps}")
     results = []
     for step in tqdm(steps):
         world_model.load_state_dict(torch.load(f"{root_path}/world_model_{step}.pth"))
@@ -169,10 +180,11 @@ if __name__ == "__main__":
         # # eval
         episode_avg_return = record_episode(
             env_name=args.env_name,
-            image_size=conf.BasicSettings.ImageSize,
-            num_envs=3,
+            image_size=conf.BasicSettings.ImageSize, 
+            num_episodes=args.num_videos, 
             output_path=args.output_path,
             world_model=world_model,
-            agent=agent
+            agent=agent,
+            use_native_resolution=args.native_resolution # Pass the flag
         )
         results.append([step, episode_avg_return])

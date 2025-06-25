@@ -55,6 +55,11 @@ def eval_episodes(num_episode, env_name, max_steps, num_envs, image_size,
     agent.eval()
     vec_env = build_vec_env(env_name, image_size, num_envs=num_envs)
     print("Current env: " + colorama.Fore.YELLOW + f"{env_name}" + colorama.Style.RESET_ALL)
+    cuda_devices = os.environ.get('CUDA_VISIBLE_DEVICES')
+    if cuda_devices is not None:
+        print("Current GPU:" + colorama.Fore.YELLOW + f"{cuda_devices}" + colorama.Style.RESET_ALL)
+    else:
+        print(colorama.Fore.YELLOW + "Current CUDA_VISIBLE_DEVICE is not set" + colorama.Style.RESET_ALL)
     sum_reward = np.zeros(num_envs)
     current_obs, current_info = vec_env.reset()
     context_obs = deque(maxlen=16)
@@ -91,7 +96,6 @@ def eval_episodes(num_episode, env_name, max_steps, num_envs, image_size,
                     final_rewards.append(sum_reward[i])
                     sum_reward[i] = 0
                     if len(final_rewards) == num_episode:
-                        print(final_rewards)
                         print("Mean reward: " + colorama.Fore.YELLOW + f"{np.mean(final_rewards)}" + colorama.Style.RESET_ALL)
                         return np.mean(final_rewards)
 
@@ -134,7 +138,7 @@ if __name__ == "__main__":
     pathes = glob.glob(f"{root_path}/world_model_*.pth")
     steps = [int(path.split("_")[-1].split(".")[0]) for path in pathes]
     steps.sort()
-    steps = steps[-1:]
+    # steps = steps[-1:]
     print(steps)
     results = []
     for step in tqdm(steps):
