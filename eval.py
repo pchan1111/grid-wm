@@ -138,7 +138,7 @@ if __name__ == "__main__":
     pathes = glob.glob(f"{root_path}/world_model_*.pth")
     steps = [int(path.split("_")[-1].split(".")[0]) for path in pathes]
     steps.sort()
-    # steps = steps[-1:]
+    steps = steps[-1:]
     print(steps)
     results = []
     for step in tqdm(steps):
