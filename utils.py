@@ -2,7 +2,7 @@ import torch
 import os
 import numpy as np
 import random
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from einops import repeat
 from contextlib import contextmanager
 import time
@@ -24,7 +24,7 @@ def seed_np_torch(seed=20010105):
 
 class Logger():
     def __init__(self, path) -> None:
-        self.writer = SummaryWriter(logdir=path, flush_secs=1)
+        self.writer = SummaryWriter(log_dir=path, flush_secs=1)
         self.tag_step = {}
 
     def log(self, tag, value):

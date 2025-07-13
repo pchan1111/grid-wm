@@ -1,34 +1,34 @@
 import gymnasium
-import ale_py
+# import ale_py
 import argparse
-from tensorboardX import SummaryWriter
-import cv2
+# from torch.utils.tensorboard import SummaryWriter
+# import cv2
 import numpy as np
 from einops import rearrange
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+# import torch.nn as nn
+# import torch.nn.functional as F
 from collections import deque
 from tqdm import tqdm
-import copy
+# import copy
 import colorama
-import random
-import json
+# import random
+# import json
 import shutil
-import pickle
+# import pickle
 import os
 
 from utils import seed_np_torch, Logger, load_config
 from replay_buffer import ReplayBuffer
 import env_wrapper
 import agents
-from sub_models.functions_losses import symexp
+# from sub_models.functions_losses import symexp
 from sub_models.world_models import WorldModel, MSELoss
 
 
 def build_single_env(env_name, image_size, seed):
     env = gymnasium.make(env_name, full_action_space=False, render_mode="rgb_array", frameskip=1)
-    env = env_wrapper.SeedEnvWrapper(env, seed=seed)
+    env = env_wrapper.SeedEnvWrapper(env, seed=seed) # TODO: delete this wrapper if not needed
     env = env_wrapper.MaxLast2FrameSkipWrapper(env, skip=4)
     env = gymnasium.wrappers.ResizeObservation(env, shape=(image_size, image_size))
     env = env_wrapper.LifeLossInfo(env)
@@ -106,16 +106,16 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
             agent.eval()
             with torch.no_grad():
                 if len(context_action) == 0:
-                    action = vec_env.action_space.sample()
+                    action = vec_env.action_space.sample() # (num_envs, )
                 else:
-                    context_latent = world_model.encode_obs(torch.cat(list(context_obs), dim=1))
-                    model_context_action = np.stack(list(context_action), axis=1)
+                    context_latent = world_model.encode_obs(torch.cat(list(context_obs), dim=1)) # (num_envs, queue_length, 32*32)
+                    model_context_action = np.stack(list(context_action), axis=1) # (num_envs, queue_length)
                     model_context_action = torch.Tensor(model_context_action).cuda()
-                    prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action)
+                    prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action) # (num_envs, 1, 1024), (num_envs,1, 32*32)
                     action = agent.sample_as_env_action(
                         torch.cat([prior_flattened_sample, last_dist_feat], dim=-1),
                         greedy=False
-                    )
+                    ) # (num_envs, )
 
             context_obs.append(rearrange(torch.Tensor(current_obs).cuda(), "B H W C -> B 1 C H W")/255)
             context_action.append(action)
@@ -123,6 +123,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
             action = vec_env.action_space.sample()
 
         obs, reward, done, truncated, info = vec_env.step(action)
+        assert np.logical_or(done, info["life_loss"]) == info["life_loss"]
         replay_buffer.append(current_obs, action, reward, np.logical_or(done, info["life_loss"]))
 
         done_flag = np.logical_or(done, truncated)
@@ -242,6 +243,7 @@ if __name__ == "__main__":
         # getting action_dim with dummy env
         dummy_env = build_single_env(args.env_name, conf.BasicSettings.ImageSize, seed=0)
         action_dim = dummy_env.action_space.n
+        print('action_dim: ', action_dim)
 
         # build world model and agent
         world_model = build_world_model(conf, action_dim)
