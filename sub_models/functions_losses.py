@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import repeat
 
 
 @torch.no_grad()
@@ -54,6 +55,35 @@ class SymLogTwoHotLoss(nn.Module):
     def decode(self, output):
         return symexp(F.softmax(output, dim=-1) @ self.bins)
 
+class SeparationLoss(nn.Module):
+    def __init__(self, separation_threshold):
+        super().__init__()
+        self.separation_threshold = separation_threshold
+    def forward(self, prior, h):
+        B, L, K, C = prior.shape
+        N = B * L
+        prior = prior.reshape(N, K, C)
+        probs = F.softmax(prior, dim=-1)
+
+        # (N, K, C) -> (N, N, K, C)
+        p1 = repeat(probs, 'N K C -> N N_repeat K C', N_repeat=N)
+        p2 = repeat(probs, 'N K C -> N_repeat N K C', N_repeat=N)
+
+        # calculate JSD
+        eps = 1e-10
+        m = 0.5 * (p1 + p2)
+        kl_p_m = (p1 * (torch.log(p1 + eps) - torch.log(m + eps))).sum(dim=-1)
+        kl_q_m = (p2 * (torch.log(p2 + eps) - torch.log(m + eps))).sum(dim=-1)
+        jsd_matrix_per_dist = 0.5 * (kl_p_m + kl_q_m)
+
+        # calculate average JSD for each pair of distributions
+        sample_jsd_matrix = jsd_matrix_per_dist.mean(dim=-1) # (N, N, K) -> (N, N)
+        mask = torch.triu(torch.ones(N, N, device=prior.device), diagonal=1).bool()
+        close_mask = (sample_jsd_matrix < self.separation_threshold) & mask
+
+        close_indices = close_mask.nonzero(as_tuple=False)
+
+        return [(i.item(), j.item()) for i, j in close_indices]
 
 if __name__ == "__main__":
     loss_func = SymLogTwoHotLoss(255, -20, 20)

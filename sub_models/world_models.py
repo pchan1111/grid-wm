@@ -6,7 +6,7 @@ from einops import rearrange, repeat, reduce
 from einops.layers.torch import Rearrange
 from torch.cuda.amp import autocast
 
-from sub_models.functions_losses import SymLogTwoHotLoss
+from sub_models.functions_losses import SymLogTwoHotLoss, SeparationLoss
 from sub_models.attention_blocks import get_subsequent_mask_with_batch_length, get_subsequent_mask
 from sub_models.transformer_model import StochasticTransformerKVCache
 import agents
@@ -205,7 +205,7 @@ class CategoricalKLDivLossWithFreeBits(nn.Module):
     def forward(self, p_logits, q_logits):
         p_dist = OneHotCategorical(logits=p_logits)
         q_dist = OneHotCategorical(logits=q_logits)
-        kl_div = torch.distributions.kl.kl_divergence(p_dist, q_dist)
+        kl_div = torch.distributions.kl.kl_divergence(p_dist, q_dist) # (B, L-1, stoch_dim)
         kl_div = reduce(kl_div, "B L D -> B L", "sum")
         kl_div = kl_div.mean()
         real_kl_div = kl_div
@@ -215,7 +215,9 @@ class CategoricalKLDivLossWithFreeBits(nn.Module):
 
 class WorldModel(nn.Module):
     def __init__(self, in_channels, action_dim,
-                 transformer_max_length, transformer_hidden_dim, transformer_num_layers, transformer_num_heads):
+                 transformer_max_length, transformer_hidden_dim, transformer_num_layers, transformer_num_heads,
+                 separation_threshold
+                 ):
         super().__init__()
         self.transformer_hidden_dim = transformer_hidden_dim
         self.final_feature_width = 4
@@ -225,6 +227,10 @@ class WorldModel(nn.Module):
         self.tensor_dtype = torch.float16 if self.use_amp else torch.float32
         self.imagine_batch_size = -1
         self.imagine_batch_length = -1
+        # for HarmonyDream
+        self.log_sigma_obs = nn.Parameter(-torch.tensor(1.0))
+        self.log_sigma_reward = nn.Parameter(-torch.tensor(1.0))
+        self.log_sigma_dyn = nn.Parameter(-torch.tensor(1.0))
 
         self.encoder = EncoderBN(
             in_channels=in_channels,
@@ -267,6 +273,7 @@ class WorldModel(nn.Module):
         self.bce_with_logits_loss_func = nn.BCEWithLogitsLoss()
         self.symlog_twohot_loss_func = SymLogTwoHotLoss(num_classes=255, lower_bound=-20, upper_bound=20)
         self.categorical_kl_div_loss = CategoricalKLDivLossWithFreeBits(free_bits=1)
+        self.separation_loss_func = SeparationLoss(separation_threshold=separation_threshold)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
@@ -274,7 +281,7 @@ class WorldModel(nn.Module):
         with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             embedding = self.encoder(obs)
             post_logits = self.dist_head.forward_post(embedding)
-            sample = self.stright_throught_gradient(post_logits, sample_mode="random_sample")
+            sample = self.straight_throught_gradient(post_logits, sample_mode="random_sample")
             flattened_sample = self.flatten_sample(sample)
         return flattened_sample
 
@@ -284,7 +291,7 @@ class WorldModel(nn.Module):
             dist_feat = self.storm_transformer(latent, action, temporal_mask)
             last_dist_feat = dist_feat[:, -1:]
             prior_logits = self.dist_head.forward_prior(last_dist_feat)
-            prior_sample = self.stright_throught_gradient(prior_logits, sample_mode="random_sample")
+            prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
             prior_flattened_sample = self.flatten_sample(prior_sample)
         return prior_flattened_sample, last_dist_feat
 
@@ -294,7 +301,7 @@ class WorldModel(nn.Module):
             prior_logits = self.dist_head.forward_prior(dist_feat)
 
             # decoding
-            prior_sample = self.stright_throught_gradient(prior_logits, sample_mode="random_sample")
+            prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
             prior_flattened_sample = self.flatten_sample(prior_sample)
             if log_video:
                 obs_hat = self.image_decoder(prior_flattened_sample)
@@ -307,7 +314,7 @@ class WorldModel(nn.Module):
 
         return obs_hat, reward_hat, termination_hat, prior_flattened_sample, dist_feat
 
-    def stright_throught_gradient(self, logits, sample_mode="random_sample"):
+    def straight_throught_gradient(self, logits, sample_mode="random_sample"):
         dist = OneHotCategorical(logits=logits)
         if sample_mode == "random_sample":
             sample = dist.sample() + dist.probs - dist.probs.detach()
@@ -381,17 +388,17 @@ class WorldModel(nn.Module):
 
         with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             # encoding
-            embedding = self.encoder(obs)
-            post_logits = self.dist_head.forward_post(embedding)
-            sample = self.stright_throught_gradient(post_logits, sample_mode="random_sample")
-            flattened_sample = self.flatten_sample(sample)
+            embedding = self.encoder(obs) # (B, L, 4096)
+            post_logits = self.dist_head.forward_post(embedding) # (B, L, stoch_dim, stoch_dim)
+            sample = self.straight_throught_gradient(post_logits, sample_mode="random_sample") # (B, L, stoch_dim, stoch_dim)
+            flattened_sample = self.flatten_sample(sample) # (B, L, stoch_dim*stoch_dim)
 
             # decoding image
-            obs_hat = self.image_decoder(flattened_sample)
+            obs_hat = self.image_decoder(flattened_sample) # (B, L, C, H, W)
 
             # transformer
-            temporal_mask = get_subsequent_mask_with_batch_length(batch_length, flattened_sample.device)
-            dist_feat = self.storm_transformer(flattened_sample, action, temporal_mask)
+            temporal_mask = get_subsequent_mask_with_batch_length(batch_length, flattened_sample.device) # (1, L, L)
+            dist_feat = self.storm_transformer(flattened_sample, action, temporal_mask) # (B, L, h)
             prior_logits = self.dist_head.forward_prior(dist_feat)
             # decoding reward and termination with dist_feat
             reward_hat = self.reward_decoder(dist_feat)
@@ -404,7 +411,30 @@ class WorldModel(nn.Module):
             # dyn-rep loss
             dynamics_loss, dynamics_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:].detach(), prior_logits[:, :-1])
             representation_loss, representation_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:], prior_logits[:, :-1].detach())
-            total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
+            
+            # HarmonyDream >>>
+            # group losses
+            obs_loss = reconstruction_loss
+            reward_loss_group = reward_loss + termination_loss
+            dynamics_loss_group = 0.5 * dynamics_loss + 0.1 * representation_loss
+
+            # get sigmas
+            sigma_obs = torch.exp(self.log_sigma_obs)
+            sigma_reward =  torch.exp(self.log_sigma_reward)
+            sigma_dyn = torch.exp(self.log_sigma_dyn)
+
+            # Calculate rectified Harmonious Loss
+            harmonized_obs_loss = sigma_obs * obs_loss + torch.log(1 + sigma_obs)
+            harmonized_reward_loss = sigma_reward * reward_loss_group + torch.log(1 + sigma_reward)
+            harmonized_dynamics_loss = sigma_dyn * dynamics_loss_group + torch.log(1 + sigma_dyn)
+            # <<< HarmonyDream
+
+            # Separation loss
+            separation_loss = self.separation_loss_func(prior_logits, dist_feat)
+
+            total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
+
+            # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
 
         # gradient descent
         self.scaler.scale(total_loss).backward()
