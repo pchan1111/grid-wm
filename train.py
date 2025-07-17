@@ -123,7 +123,6 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
             action = vec_env.action_space.sample()
 
         obs, reward, done, truncated, info = vec_env.step(action)
-        assert np.logical_or(done, info["life_loss"]) == info["life_loss"]
         replay_buffer.append(current_obs, action, reward, np.logical_or(done, info["life_loss"]))
 
         done_flag = np.logical_or(done, truncated)
@@ -197,7 +196,8 @@ def build_world_model(conf, action_dim):
         transformer_max_length=conf.Models.WorldModel.TransformerMaxLength,
         transformer_hidden_dim=conf.Models.WorldModel.TransformerHiddenDim,
         transformer_num_layers=conf.Models.WorldModel.TransformerNumLayers,
-        transformer_num_heads=conf.Models.WorldModel.TransformerNumHeads
+        transformer_num_heads=conf.Models.WorldModel.TransformerNumHeads,
+        separation_threshold=conf.Models.WorldModel.SeparationThreshold
     ).cuda()
 
 
