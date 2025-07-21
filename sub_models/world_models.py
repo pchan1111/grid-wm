@@ -482,5 +482,5 @@ class WorldModel(nn.Module):
             logger.log("WorldModel/sep_loss/std_jsd", stats["std_jsd"])
             logger.log("WorldModel/sep_loss/loss_att", stats["loss_att"])
             logger.log("WorldModel/sep_loss/loss_rep", stats["loss_rep"])
-            logger.log("WorldModek/sep_loss/threshold", self.sep_threshold.item())
+            logger.log("WorldModel/sep_loss/threshold", self.sep_threshold.item())
 
