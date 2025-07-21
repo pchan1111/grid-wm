@@ -64,7 +64,7 @@ class SymLogTwoHotLoss(nn.Module):
         return symexp(F.softmax(output, dim=-1) @ self.bins)
 
 class SeparationLoss(nn.Module):
-    def __init__(self, sep_threshold):
+    def __init__(self, sep_threshold, conf):
         super().__init__()
         self.sep_threshold = sep_threshold
         self.temperature = 1.0
@@ -128,6 +128,8 @@ class SeparationLoss(nn.Module):
         stats["rep_pairs_ratio"] = (rep_mask.sum() / (triu_mask.sum() * B)).item()
         stats["loss_att"] = loss_att.item()
         stats["loss_rep"] = loss_rep.item()
+        stats["soft_att"] = soft_att
+        stats["soft_rep"] = soft_rep
         
         valid_jsd_values = jsd_matrix[triu_mask.unsqueeze(0).expand(B, L, L).bool()]
         stats["mean_jsd"] = valid_jsd_values.mean().item()

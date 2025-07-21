@@ -6,6 +6,7 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 import copy
 from torch.cuda.amp import autocast
+import wandb
 
 from sub_models.functions_losses import SymLogTwoHotLoss
 from utils import EMAScalar

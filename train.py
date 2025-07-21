@@ -17,6 +17,7 @@ import colorama
 import shutil
 # import pickle
 import os
+import wandb
 
 from utils import seed_np_torch, Logger, load_config
 from replay_buffer import ReplayBuffer
@@ -45,7 +46,7 @@ def build_vec_env(env_name, image_size, num_envs, seed):
     return vec_env
 
 
-def train_world_model_step(replay_buffer: ReplayBuffer, world_model: WorldModel, batch_size, demonstration_batch_size, batch_length, logger):
+def train_world_model_step(replay_buffer: ReplayBuffer, world_model: WorldModel, batch_size, demonstration_batch_size, batch_length, logger, conf):
     obs, action, reward, termination = replay_buffer.sample(batch_size, demonstration_batch_size, batch_length)
     world_model.update(obs, action, reward, termination, logger=logger)
 
@@ -81,7 +82,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                                   batch_size, demonstration_batch_size, batch_length,
                                   imagine_batch_size, imagine_demonstration_batch_size,
                                   imagine_context_length, imagine_batch_length,
-                                  save_every_steps, seed, logger):
+                                  save_every_steps, seed, logger, conf):
     # create ckpt dir
     os.makedirs(f"ckpt/{args.n}", exist_ok=True)
 
@@ -148,7 +149,8 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                 batch_size=batch_size,
                 demonstration_batch_size=demonstration_batch_size,
                 batch_length=batch_length,
-                logger=logger
+                logger=logger,
+                conf=conf
             )
         # <<< train world model part
 
@@ -190,15 +192,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
 
 
 def build_world_model(conf, action_dim):
-    return WorldModel(
-        in_channels=conf.Models.WorldModel.InChannels,
-        action_dim=action_dim,
-        transformer_max_length=conf.Models.WorldModel.TransformerMaxLength,
-        transformer_hidden_dim=conf.Models.WorldModel.TransformerHiddenDim,
-        transformer_num_layers=conf.Models.WorldModel.TransformerNumLayers,
-        transformer_num_heads=conf.Models.WorldModel.TransformerNumHeads,
-        separation_threshold=conf.Models.WorldModel.SeparationThreshold
-    ).cuda()
+    return WorldModel(action_dim=action_dim, conf=conf).cuda()
 
 
 def build_agent(conf, action_dim):
@@ -237,6 +231,16 @@ if __name__ == "__main__":
     logger = Logger(path=f"runs/{args.n}")
     # copy config file
     shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
+
+    # WandB
+    wandb.init(
+        project = args.n,
+        config = {
+            "AdamW_weight_decay" : 1e-3,
+            "SepLoss_balance": 0.01
+        }
+    )
+
 
     # distinguish between tasks, other debugging options are removed for simplicity
     if conf.Task == "JointTrainAgent":
@@ -283,7 +287,8 @@ if __name__ == "__main__":
             imagine_batch_length=conf.JointTrainAgent.ImagineBatchLength,
             save_every_steps=conf.JointTrainAgent.SaveEverySteps,
             seed=args.seed,
-            logger=logger
+            logger=logger,
+            conf=conf
         )
     else:
         raise NotImplementedError(f"Task {conf.Task} not implemented")

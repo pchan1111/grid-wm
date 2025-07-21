@@ -5,6 +5,7 @@ from torch.distributions import OneHotCategorical, Normal
 from einops import rearrange, repeat, reduce
 from einops.layers.torch import Rearrange
 from torch.cuda.amp import autocast
+import wandb
 
 from sub_models.functions_losses import SymLogTwoHotLoss, SeparationLoss
 from sub_models.attention_blocks import get_subsequent_mask_with_batch_length, get_subsequent_mask
@@ -214,12 +215,9 @@ class CategoricalKLDivLossWithFreeBits(nn.Module):
 
 
 class WorldModel(nn.Module):
-    def __init__(self, in_channels, action_dim,
-                 transformer_max_length, transformer_hidden_dim, transformer_num_layers, transformer_num_heads,
-                 separation_threshold
-                 ):
+    def __init__(self, action_dim, conf):
         super().__init__()
-        self.transformer_hidden_dim = transformer_hidden_dim
+        self.transformer_hidden_dim = conf.Models.WorldModel.TransformerHiddenDim
         self.final_feature_width = 4
         self.stoch_dim = 32
         self.stoch_flattened_dim = self.stoch_dim*self.stoch_dim
@@ -234,43 +232,43 @@ class WorldModel(nn.Module):
         self.log_sigma_att = nn.Parameter(-torch.tensor(1.0)) 
         self.log_sigma_rep = nn.Parameter(-torch.tensor(1.0))
         # for separation loss
-        self.sep_threshold = nn.Parameter(torch.tensor(8.3))
+        self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
         self.i = 0
 
         self.encoder = EncoderBN(
-            in_channels=in_channels,
+            in_channels=conf.Models.WorldModel.InChannels,
             stem_channels=32,
             final_feature_width=self.final_feature_width
         )
         self.storm_transformer = StochasticTransformerKVCache(
             stoch_dim=self.stoch_flattened_dim,
             action_dim=action_dim,
-            feat_dim=transformer_hidden_dim,
-            num_layers=transformer_num_layers,
-            num_heads=transformer_num_heads,
-            max_length=transformer_max_length,
+            feat_dim=self.transformer_hidden_dim,
+            num_layers=conf.Models.WorldModel.TransformerNumLayers,
+            num_heads=conf.Models.WorldModel.TransformerNumHeads,
+            max_length=conf.Models.WorldModel.TransformerMaxLength,
             dropout=0.1
         )
         self.dist_head = DistHead(
             image_feat_dim=self.encoder.last_channels*self.final_feature_width*self.final_feature_width,
-            transformer_hidden_dim=transformer_hidden_dim,
+            transformer_hidden_dim=self.transformer_hidden_dim,
             stoch_dim=self.stoch_dim
         )
         self.image_decoder = DecoderBN(
             stoch_dim=self.stoch_flattened_dim,
             last_channels=self.encoder.last_channels,
-            original_in_channels=in_channels,
+            original_in_channels=conf.Models.WorldModel.InChannels,
             stem_channels=32,
             final_feature_width=self.final_feature_width
         )
         self.reward_decoder = RewardDecoder(
             num_classes=255,
             embedding_size=self.stoch_flattened_dim,
-            transformer_hidden_dim=transformer_hidden_dim
+            transformer_hidden_dim=self.transformer_hidden_dim
         )
         self.termination_decoder = TerminationDecoder(
             embedding_size=self.stoch_flattened_dim,
-            transformer_hidden_dim=transformer_hidden_dim
+            transformer_hidden_dim=self.transformer_hidden_dim
         )
 
         self.mse_loss_func = MSELoss()
@@ -278,8 +276,10 @@ class WorldModel(nn.Module):
         self.bce_with_logits_loss_func = nn.BCEWithLogitsLoss()
         self.symlog_twohot_loss_func = SymLogTwoHotLoss(num_classes=255, lower_bound=-20, upper_bound=20)
         self.categorical_kl_div_loss = CategoricalKLDivLossWithFreeBits(free_bits=1)
-        self.separation_loss_func = SeparationLoss(sep_threshold=self.sep_threshold)
-        self.optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=1e-3)
+        self.separation_loss_func = SeparationLoss(sep_threshold=self.sep_threshold, conf=conf)
+        self.optimizer = torch.optim.AdamW(self.parameters(), 
+                                           lr=conf.Models.WorldModel.LearningRate, 
+                                           weight_decay=conf.Models.WorldModel.WeightDecay)
         # self.model_params = []
         # self.sep_threshold_params = []
         # for name, param in self.named_parameters():
@@ -460,6 +460,11 @@ class WorldModel(nn.Module):
         # gradient descent
         self.scaler.scale(total_loss).backward()
         self.scaler.unscale_(self.optimizer)  # for clip grad
+        # Check threshold
+        if self.sep_threshold.grad is not None:
+            stats["sep_threshold_grad"] = self.sep_threshold.grad.item()
+        else:
+            stats["sep_threshold_grad"] = 0
         torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1000.0)
         self.scaler.step(self.optimizer)
         self.scaler.update()
@@ -474,13 +479,17 @@ class WorldModel(nn.Module):
             logger.log("WorldModel/representation_loss", representation_loss.item())
             logger.log("WorldModel/representation_real_kl_div", representation_real_kl_div.item())
             logger.log("WorldModel/total_loss", total_loss.item())
-            logger.log("WorldModel/sep_loss/pairwise_mse_mean", stats["pairwise_mse_mean"])
-            logger.log("WorldModel/sep_loss/pairwise_mse_std", stats["pairwise_mse_std"])
-            logger.log("WorldModel/sep_loss/att_pairs_ratio", stats["att_pairs_ratio"])
-            logger.log("WorldModel/sep_loss/rep_pairs_ratio", stats["rep_pairs_ratio"])
-            logger.log("WorldModel/sep_loss/mean_jsd", stats["mean_jsd"])
-            logger.log("WorldModel/sep_loss/std_jsd", stats["std_jsd"])
-            logger.log("WorldModel/sep_loss/loss_att", stats["loss_att"])
-            logger.log("WorldModel/sep_loss/loss_rep", stats["loss_rep"])
-            logger.log("WorldModel/sep_loss/threshold", self.sep_threshold.item())
+            logger.log("sep_loss/1.mean_jsd", stats["mean_jsd"])
+            logger.log("sep_loss/1.std_jsd", stats["std_jsd"])
+            logger.log("sep_loss/2.pairwise_mse_mean", stats["pairwise_mse_mean"])
+            logger.log("sep_loss/2.pairwise_mse_std", stats["pairwise_mse_std"])
+            logger.log("sep_loss/3.sotf_att", stats["soft_att"])
+            logger.log("sep_loss/3.soft_rep", stats["sotf_rep"])
+            logger.log("sep_loss/4.loss_att", stats["loss_att"])
+            logger.log("sep_loss/4.loss_rep", stats["loss_rep"])
+            logger.log("sep_loss/5.att_pairs_ratio", stats["att_pairs_ratio"])
+            logger.log("sep_loss/5.rep_pairs_ratio", stats["rep_pairs_ratio"])
+            logger.log("sep_loss/6.threshold", self.sep_threshold.item())
+            logger.log("sep_loss/6.sep_threshold_grad", stats["sep_threshold_grad"])
+            
 
