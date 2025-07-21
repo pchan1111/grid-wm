@@ -82,7 +82,7 @@ class ActorCriticAgent(nn.Module):
         self.lowerbound_ema = EMAScalar(decay=0.99)
         self.upperbound_ema = EMAScalar(decay=0.99)
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=3e-5, eps=1e-5)
+        self.optimizer = torch.optim.AdamW(self.parameters(), lr=3e-5, eps=1e-5, weight_decay=1e-3)
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     @torch.no_grad()

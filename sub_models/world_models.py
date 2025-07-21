@@ -231,6 +231,11 @@ class WorldModel(nn.Module):
         self.log_sigma_obs = nn.Parameter(-torch.tensor(1.0))
         self.log_sigma_reward = nn.Parameter(-torch.tensor(1.0))
         self.log_sigma_dyn = nn.Parameter(-torch.tensor(1.0))
+        self.log_sigma_att = nn.Parameter(-torch.tensor(1.0)) 
+        self.log_sigma_rep = nn.Parameter(-torch.tensor(1.0))
+        # for separation loss
+        self.sep_threshold = nn.Parameter(torch.tensor(8.3))
+        self.i = 0
 
         self.encoder = EncoderBN(
             in_channels=in_channels,
@@ -273,8 +278,17 @@ class WorldModel(nn.Module):
         self.bce_with_logits_loss_func = nn.BCEWithLogitsLoss()
         self.symlog_twohot_loss_func = SymLogTwoHotLoss(num_classes=255, lower_bound=-20, upper_bound=20)
         self.categorical_kl_div_loss = CategoricalKLDivLossWithFreeBits(free_bits=1)
-        self.separation_loss_func = SeparationLoss(separation_threshold=separation_threshold)
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
+        self.separation_loss_func = SeparationLoss(sep_threshold=self.sep_threshold)
+        self.optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=1e-3)
+        # self.model_params = []
+        # self.sep_threshold_params = []
+        # for name, param in self.named_parameters():
+        #     if "sep_threshold" in name:
+        #         self.sep_threshold_params.append(param)
+        #     else:
+        #         param.requires_grad = True
+        # self.optimizer_model = torch.optim.AdamW(self.model_params, lr=1e-4)
+        # self.optimizer_sep_threshold = torch.optim.AdamW(self.sep_threshold, lr=1e-4)
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     def encode_obs(self, obs):
@@ -283,6 +297,7 @@ class WorldModel(nn.Module):
             post_logits = self.dist_head.forward_post(embedding)
             sample = self.straight_throught_gradient(post_logits, sample_mode="random_sample")
             flattened_sample = self.flatten_sample(sample)
+        
         return flattened_sample
 
     def calc_last_dist_feat(self, latent, action):
@@ -392,6 +407,7 @@ class WorldModel(nn.Module):
             post_logits = self.dist_head.forward_post(embedding) # (B, L, stoch_dim, stoch_dim)
             sample = self.straight_throught_gradient(post_logits, sample_mode="random_sample") # (B, L, stoch_dim, stoch_dim)
             flattened_sample = self.flatten_sample(sample) # (B, L, stoch_dim*stoch_dim)
+            
 
             # decoding image
             obs_hat = self.image_decoder(flattened_sample) # (B, L, C, H, W)
@@ -412,6 +428,9 @@ class WorldModel(nn.Module):
             dynamics_loss, dynamics_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:].detach(), prior_logits[:, :-1])
             representation_loss, representation_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:], prior_logits[:, :-1].detach())
             
+            # Separation loss
+            loss_att, loss_rep, stats = self.separation_loss_func(prior_logits, dist_feat)
+
             # HarmonyDream >>>
             # group losses
             obs_loss = reconstruction_loss
@@ -422,19 +441,21 @@ class WorldModel(nn.Module):
             sigma_obs = torch.exp(self.log_sigma_obs)
             sigma_reward =  torch.exp(self.log_sigma_reward)
             sigma_dyn = torch.exp(self.log_sigma_dyn)
+            sigma_att = torch.exp(self.log_sigma_att)
+            sigma_rep = torch.exp(self.log_sigma_rep)
 
             # Calculate rectified Harmonious Loss
             harmonized_obs_loss = sigma_obs * obs_loss + torch.log(1 + sigma_obs)
             harmonized_reward_loss = sigma_reward * reward_loss_group + torch.log(1 + sigma_reward)
             harmonized_dynamics_loss = sigma_dyn * dynamics_loss_group + torch.log(1 + sigma_dyn)
+            harmonized_att_loss = sigma_att * loss_att + torch.log(1 + sigma_att)
+            harmonized_rep_loss = sigma_rep * loss_rep + torch.log(1 + sigma_rep)
             # <<< HarmonyDream
-
-            # Separation loss
-            separation_loss = self.separation_loss_func(prior_logits, dist_feat)
-
-            total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
-
-            # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
+            
+            # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
+            total_loss = total_loss if self.i < 20000 else total_loss + 0.01 * (harmonized_att_loss + 2.0 * harmonized_rep_loss)
+            self.i += 1
+            total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
 
         # gradient descent
         self.scaler.scale(total_loss).backward()
@@ -453,3 +474,13 @@ class WorldModel(nn.Module):
             logger.log("WorldModel/representation_loss", representation_loss.item())
             logger.log("WorldModel/representation_real_kl_div", representation_real_kl_div.item())
             logger.log("WorldModel/total_loss", total_loss.item())
+            logger.log("WorldModel/sep_loss/pairwise_mse_mean", stats["pairwise_mse_mean"])
+            logger.log("WorldModel/sep_loss/pairwise_mse_std", stats["pairwise_mse_std"])
+            logger.log("WorldModel/sep_loss/att_pairs_ratio", stats["att_pairs_ratio"])
+            logger.log("WorldModel/sep_loss/rep_pairs_ratio", stats["rep_pairs_ratio"])
+            logger.log("WorldModel/sep_loss/mean_jsd", stats["mean_jsd"])
+            logger.log("WorldModel/sep_loss/std_jsd", stats["std_jsd"])
+            logger.log("WorldModel/sep_loss/loss_att", stats["loss_att"])
+            logger.log("WorldModel/sep_loss/loss_rep", stats["loss_rep"])
+            logger.log("WorldModek/sep_loss/threshold", self.sep_threshold.item())
+
