@@ -35,7 +35,7 @@ Models:
       SeparationThreshold: 8.3
       SeparationLossBalance: 0.01
       SigmoidTemperature: 1.0
-      ExponentialTemperature: 1.0
+      ExponentialTemperature: 3.0
       AttractionLossGate: 0.45
       RepulsionLossGate: 0.15
       AttractionRepulsionRatio: 2.0

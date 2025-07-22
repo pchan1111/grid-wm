@@ -122,14 +122,16 @@ class SeparationLoss(nn.Module):
 
         # --- 5. Statistics for debugging ---
         stats = {}
-        stats["pairwise_mse_mean"] = pairwise_mse.mean() # to choose the dist_temperature
-        stats["pairwise_mse_std"] = pairwise_mse.std()
+        stats["pairwise_mse_mean"] = pairwise_mse.mean().item()
+        stats["pairwise_mse_std"] = pairwise_mse.std().item()
         stats["att_pairs_ratio"] = (att_mask.sum() / (triu_mask.sum() * B)).item()
         stats["rep_pairs_ratio"] = (rep_mask.sum() / (triu_mask.sum() * B)).item()
         stats["loss_att"] = loss_att.item()
         stats["loss_rep"] = loss_rep.item()
-        stats["soft_att"] = soft_att
-        stats["soft_rep"] = soft_rep
+        stats["soft_att_mean"] = soft_att.mean().item()
+        stats["soft_att_std"] = soft_att.std().item()
+        stats["soft_rep_mean"] = soft_rep.mean().item()
+        stats["soft_rep_std"] = soft_rep.std().item()
         
         valid_jsd_values = jsd_matrix[triu_mask.unsqueeze(0).expand(B, L, L).bool()]
         stats["mean_jsd"] = valid_jsd_values.mean().item()

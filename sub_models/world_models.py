@@ -234,6 +234,8 @@ class WorldModel(nn.Module):
         # for separation loss
         self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
         self.record_run= record_run
+        self.att_rep_ratio = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
+        self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
         self.i = 0
 
         self.encoder = EncoderBN(
@@ -454,9 +456,10 @@ class WorldModel(nn.Module):
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
-            total_loss = total_loss if self.i < 20000 else total_loss + 0.01 * (harmonized_att_loss + 2.0 * harmonized_rep_loss)
+            if self.i > 20000: 
+                total_loss += self.sep_loss_balance * (harmonized_att_loss + self.att_rep_ratio * harmonized_rep_loss)
             self.i += 1
-            total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
+            # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
 
         # gradient descent
         self.scaler.scale(total_loss).backward()
@@ -483,8 +486,10 @@ class WorldModel(nn.Module):
                 "sep_loss/1.std_jsd": stats["std_jsd"],
                 "sep_loss/2.pairwise_mse_mean": stats["pairwise_mse_mean"],
                 "sep_loss/2.pairwise_mse_std": stats["pairwise_mse_std"],
-                "sep_loss/3.sotf_att": stats["soft_att"],
-                "sep_loss/3.soft_rep": stats["soft_rep"],
+                "sep_loss/3.sotf_att_mean": stats["soft_att_mean"],
+                "sep_loss/3.sotf_att_std": stats["soft_att_std"],
+                "sep_loss/3.soft_rep_mean": stats["soft_rep_mean"],
+                "sep_loss/3.sotf_rep_std": stats["soft_rep_std"],
                 "sep_loss/4.loss_att": stats["loss_att"],
                 "sep_loss/4.loss_rep": stats["loss_rep"],
                 "sep_loss/5.att_pairs_ratio": stats["att_pairs_ratio"],
