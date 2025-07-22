@@ -134,9 +134,9 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                     # logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
                     # logger.log("replay_buffer/length", len(replay_buffer))
                     wandb.log({
-                        f"sample/{env_name}_reward", sum_reward[i],
-                        f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4,
-                        "replay_buffer/length", len(replay_buffer)
+                        f"sample/{env_name}_reward": sum_reward[i],
+                        f"sample/{env_name}_episode_steps": current_info["episode_frame_number"][i]//4,
+                        "replay_buffer/length": len(replay_buffer)
                     })
                     sum_reward[i] = 0
 

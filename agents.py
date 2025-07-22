@@ -175,12 +175,12 @@ class ActorCriticAgent(nn.Module):
         self.update_slow_critic()
 
         wandb.log({
-            'ActorCritic/policy_loss', policy_loss.item(),
-            'ActorCritic/value_loss', value_loss.item(),
-            'ActorCritic/entropy_loss', entropy_loss.item(),
-            'ActorCritic/S', S.item(),
-            'ActorCritic/norm_ratio', norm_ratio.item(),
-            'ActorCritic/total_loss', loss.item() 
+            'ActorCritic/policy_loss': policy_loss.item(),
+            'ActorCritic/value_loss': value_loss.item(),
+            'ActorCritic/entropy_loss': entropy_loss.item(),
+            'ActorCritic/S': S.item(),
+            'ActorCritic/norm_ratio': norm_ratio.item(),
+            'ActorCritic/total_loss': loss.item() 
         })
 
         # if logger is not None:
