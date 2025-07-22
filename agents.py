@@ -36,7 +36,7 @@ def calc_lambda_return(rewards, values, termination, gamma, lam, dtype=torch.flo
 
 
 class ActorCriticAgent(nn.Module):
-    def __init__(self, action_dim, conf) -> None:
+    def __init__(self, action_dim, record_run, conf) -> None:
         super().__init__()
         feat_dim = 32*32+conf.Models.WorldModel.TransformerHiddenDim
         num_layers = conf.Models.Agent.NumLayers
@@ -46,6 +46,7 @@ class ActorCriticAgent(nn.Module):
         self.entropy_coef = conf.Models.Agent.EntropyCoef
         self.use_amp = True
         self.tensor_dtype = torch.float16 if self.use_amp else torch.float32
+        self.record_run = record_run
 
         self.symlog_twohot_loss = SymLogTwoHotLoss(255, -20, 20)
 
@@ -174,14 +175,15 @@ class ActorCriticAgent(nn.Module):
 
         self.update_slow_critic()
 
-        wandb.log({
-            'ActorCritic/policy_loss': policy_loss.item(),
-            'ActorCritic/value_loss': value_loss.item(),
-            'ActorCritic/entropy_loss': entropy_loss.item(),
-            'ActorCritic/S': S.item(),
-            'ActorCritic/norm_ratio': norm_ratio.item(),
-            'ActorCritic/total_loss': loss.item() 
-        })
+        if self.record_run:
+            wandb.log({
+                'ActorCritic/policy_loss': policy_loss.item(),
+                'ActorCritic/value_loss': value_loss.item(),
+                'ActorCritic/entropy_loss': entropy_loss.item(),
+                'ActorCritic/S': S.item(),
+                'ActorCritic/norm_ratio': norm_ratio.item(),
+                'ActorCritic/total_loss': loss.item() 
+            })
 
         # if logger is not None:
         #     logger.log('ActorCritic/policy_loss', policy_loss.item())

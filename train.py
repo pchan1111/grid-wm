@@ -82,7 +82,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                                   batch_size, demonstration_batch_size, batch_length,
                                   imagine_batch_size, imagine_demonstration_batch_size,
                                   imagine_context_length, imagine_batch_length,
-                                  save_every_steps, seed, logger):
+                                  save_every_steps, seed, logger, record_run):
     # create ckpt dir
     os.makedirs(f"ckpt/{args.n}", exist_ok=True)
 
@@ -133,12 +133,13 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                     # logger.log(f"sample/{env_name}_reward", sum_reward[i])
                     # logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
                     # logger.log("replay_buffer/length", len(replay_buffer))
-                    wandb.log({
-                        f"sample/{env_name}_reward": sum_reward[i],
-                        f"sample/{env_name}_episode_steps": current_info["episode_frame_number"][i]//4,
-                        "replay_buffer/length": len(replay_buffer)
-                    })
-                    sum_reward[i] = 0
+                    if record_run:
+                        wandb.log({
+                            f"sample/{env_name}_reward": sum_reward[i],
+                            f"sample/{env_name}_episode_steps": current_info["episode_frame_number"][i]//4,
+                            "replay_buffer/length": len(replay_buffer)
+                        })
+                        sum_reward[i] = 0
 
         # update current_obs, current_info and sum_reward
         sum_reward += reward
@@ -196,12 +197,12 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
             torch.save(agent.state_dict(), f"ckpt/{args.n}/agent_{total_steps}.pth")
 
 
-def build_world_model(conf, action_dim):
-    return WorldModel(action_dim=action_dim, conf=conf).cuda()
+def build_world_model(action_dim, record_run, conf):
+    return WorldModel(action_dim=action_dim, record_run=record_run,  conf=conf).cuda()
 
 
-def build_agent(conf, action_dim):
-    return agents.ActorCriticAgent(action_dim=action_dim, conf=conf).cuda()
+def build_agent(action_dim, record_run, conf):
+    return agents.ActorCriticAgent(action_dim=action_dim, record_run=record_run, conf=conf ).cuda()
 
 
 if __name__ == "__main__":
@@ -218,6 +219,7 @@ if __name__ == "__main__":
     parser.add_argument("-config_path", type=str, required=True)
     parser.add_argument("-env_name", type=str, required=True)
     parser.add_argument("-trajectory_path", type=str, required=True)
+    parser.add_argument("-record_run", action="store_true")
     args = parser.parse_args()
     conf = load_config(args.config_path)
     print(colorama.Fore.RED + str(args) + colorama.Style.RESET_ALL)
@@ -228,14 +230,16 @@ if __name__ == "__main__":
     # logger = Logger(path=f"runs/{args.n}")
     logger = None
     # copy config file
-    # shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
+    if args.record_run:
+        shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
 
     # WandB
-    wandb.init(
-        project = "grid-wm",
-        config = conf,
-        name = args.n
-    )
+    if args.record_run:
+        wandb.init(
+            project = "grid-wm",
+            config = conf,
+            name = args.n
+        )
 
 
     # distinguish between tasks, other debugging options are removed for simplicity
@@ -246,8 +250,8 @@ if __name__ == "__main__":
         print('action_dim: ', action_dim)
 
         # build world model and agent
-        world_model = build_world_model(conf, action_dim)
-        agent = build_agent(conf, action_dim)
+        world_model = build_world_model(action_dim, args.record_run, conf)
+        agent = build_agent(action_dim, args.record_run, conf)
 
         # build replay buffer
         replay_buffer = ReplayBuffer(
@@ -283,7 +287,8 @@ if __name__ == "__main__":
             imagine_batch_length=conf.JointTrainAgent.ImagineBatchLength,
             save_every_steps=conf.JointTrainAgent.SaveEverySteps,
             seed=args.seed,
-            logger=logger
+            logger=logger,
+            record_run=args.record_run
         )
     else:
         raise NotImplementedError(f"Task {conf.Task} not implemented")

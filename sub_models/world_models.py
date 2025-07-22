@@ -215,7 +215,7 @@ class CategoricalKLDivLossWithFreeBits(nn.Module):
 
 
 class WorldModel(nn.Module):
-    def __init__(self, action_dim, conf):
+    def __init__(self, action_dim, record_run, conf):
         super().__init__()
         self.transformer_hidden_dim = conf.Models.WorldModel.TransformerHiddenDim
         self.final_feature_width = 4
@@ -233,6 +233,7 @@ class WorldModel(nn.Module):
         self.log_sigma_rep = nn.Parameter(-torch.tensor(1.0))
         # for separation loss
         self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
+        self.record_run= record_run
         self.i = 0
 
         self.encoder = EncoderBN(
@@ -470,26 +471,27 @@ class WorldModel(nn.Module):
         self.scaler.update()
         self.optimizer.zero_grad(set_to_none=True)
 
-        wandb.log({
-            "WorldModel/reconstruction_loss": reconstruction_loss.item(),
-            "WorldModel/reward_loss": reward_loss.item(),
-            "WorldModel/termination_loss": termination_loss.item(),
-            "WorldModel/dynamics_loss": dynamics_loss.item(),
-            "WorldModel/representation_loss": representation_loss.item(),
-            "WorldModel/total_loss": total_loss.item(),
-            "sep_loss/1.mean_jsd": stats["mean_jsd"],
-            "sep_loss/1.std_jsd": stats["std_jsd"],
-            "sep_loss/2.pairwise_mse_mean": stats["pairwise_mse_mean"],
-            "sep_loss/2.pairwise_mse_std": stats["pairwise_mse_std"],
-            "sep_loss/3.sotf_att": stats["soft_att"],
-            "sep_loss/3.soft_rep": stats["soft_rep"],
-            "sep_loss/4.loss_att": stats["loss_att"],
-            "sep_loss/4.loss_rep": stats["loss_rep"],
-            "sep_loss/5.att_pairs_ratio": stats["att_pairs_ratio"],
-            "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
-            "sep_loss/6.threshold": self.sep_threshold.item(),
-            "sep_loss/6.sep_threshold_grad": stats["sep_threshold_grad"]
-        })
+        if self.record_run:
+            wandb.log({
+                "WorldModel/reconstruction_loss": reconstruction_loss.item(),
+                "WorldModel/reward_loss": reward_loss.item(),
+                "WorldModel/termination_loss": termination_loss.item(),
+                "WorldModel/dynamics_loss": dynamics_loss.item(),
+                "WorldModel/representation_loss": representation_loss.item(),
+                "WorldModel/total_loss": total_loss.item(),
+                "sep_loss/1.mean_jsd": stats["mean_jsd"],
+                "sep_loss/1.std_jsd": stats["std_jsd"],
+                "sep_loss/2.pairwise_mse_mean": stats["pairwise_mse_mean"],
+                "sep_loss/2.pairwise_mse_std": stats["pairwise_mse_std"],
+                "sep_loss/3.sotf_att": stats["soft_att"],
+                "sep_loss/3.soft_rep": stats["soft_rep"],
+                "sep_loss/4.loss_att": stats["loss_att"],
+                "sep_loss/4.loss_rep": stats["loss_rep"],
+                "sep_loss/5.att_pairs_ratio": stats["att_pairs_ratio"],
+                "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
+                "sep_loss/6.threshold": self.sep_threshold.item(),
+                "sep_loss/6.sep_threshold_grad": stats["sep_threshold_grad"]
+            })
         
         # if logger is not None:
             # logger.log("WorldModel/reconstruction_loss", reconstruction_loss.item())
