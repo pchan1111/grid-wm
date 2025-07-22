@@ -470,7 +470,7 @@ class WorldModel(nn.Module):
         self.scaler.update()
         self.optimizer.zero_grad(set_to_none=True)
 
-        wandb.log = {
+        wandb.log({
             "WorldModel/reconstruction_loss": reconstruction_loss.item(),
             "WorldModel/reward_loss": reward_loss.item(),
             "WorldModel/termination_loss": termination_loss.item(),
@@ -489,7 +489,7 @@ class WorldModel(nn.Module):
             "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
             "sep_loss/6.threshold": self.sep_threshold.item(),
             "sep_loss/6.sep_threshold_grad": stats["sep_threshold_grad"]
-        }
+        })
         
         # if logger is not None:
             # logger.log("WorldModel/reconstruction_loss", reconstruction_loss.item())

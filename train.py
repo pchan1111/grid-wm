@@ -133,11 +133,11 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                     # logger.log(f"sample/{env_name}_reward", sum_reward[i])
                     # logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
                     # logger.log("replay_buffer/length", len(replay_buffer))
-                    wandb.log = {
+                    wandb.log({
                         f"sample/{env_name}_reward", sum_reward[i],
                         f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4,
                         "replay_buffer/length", len(replay_buffer)
-                    }
+                    })
                     sum_reward[i] = 0
 
         # update current_obs, current_info and sum_reward
@@ -162,7 +162,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
         # train agent part >>>
         if replay_buffer.ready() and total_steps % (train_agent_every_steps//num_envs) == 0 and total_steps*num_envs >= 0:
             if total_steps % (save_every_steps//num_envs) == 0:
-                log_video = True
+                log_video = False # True
             else:
                 log_video = False
 
