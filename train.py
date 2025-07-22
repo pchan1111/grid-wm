@@ -231,7 +231,10 @@ if __name__ == "__main__":
     logger = None
     # copy config file
     if args.record_run:
-        shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
+        destination_path = f"runs/{args.n}/config.yaml"
+        destination_dir = os.path.dirname(destination_path)
+        os.makedirs(destination_dir, exist_ok=True)
+        shutil.copy(args.config_path, destination_path)
 
     # WandB
     if args.record_run:
