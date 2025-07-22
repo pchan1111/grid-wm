@@ -452,7 +452,7 @@ class WorldModel(nn.Module):
             harmonized_rep_loss = sigma_rep * loss_rep + torch.log(1 + sigma_rep)
             # <<< HarmonyDream
             
-            # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
+            total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
             total_loss = total_loss if self.i < 20000 else total_loss + 0.01 * (harmonized_att_loss + 2.0 * harmonized_rep_loss)
             self.i += 1
             total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
@@ -470,26 +470,47 @@ class WorldModel(nn.Module):
         self.scaler.update()
         self.optimizer.zero_grad(set_to_none=True)
 
-        if logger is not None:
-            logger.log("WorldModel/reconstruction_loss", reconstruction_loss.item())
-            logger.log("WorldModel/reward_loss", reward_loss.item())
-            logger.log("WorldModel/termination_loss", termination_loss.item())
-            logger.log("WorldModel/dynamics_loss", dynamics_loss.item())
-            logger.log("WorldModel/dynamics_real_kl_div", dynamics_real_kl_div.item())
-            logger.log("WorldModel/representation_loss", representation_loss.item())
-            logger.log("WorldModel/representation_real_kl_div", representation_real_kl_div.item())
-            logger.log("WorldModel/total_loss", total_loss.item())
-            logger.log("sep_loss/1.mean_jsd", stats["mean_jsd"])
-            logger.log("sep_loss/1.std_jsd", stats["std_jsd"])
-            logger.log("sep_loss/2.pairwise_mse_mean", stats["pairwise_mse_mean"])
-            logger.log("sep_loss/2.pairwise_mse_std", stats["pairwise_mse_std"])
-            logger.log("sep_loss/3.sotf_att", stats["soft_att"])
-            logger.log("sep_loss/3.soft_rep", stats["sotf_rep"])
-            logger.log("sep_loss/4.loss_att", stats["loss_att"])
-            logger.log("sep_loss/4.loss_rep", stats["loss_rep"])
-            logger.log("sep_loss/5.att_pairs_ratio", stats["att_pairs_ratio"])
-            logger.log("sep_loss/5.rep_pairs_ratio", stats["rep_pairs_ratio"])
-            logger.log("sep_loss/6.threshold", self.sep_threshold.item())
-            logger.log("sep_loss/6.sep_threshold_grad", stats["sep_threshold_grad"])
+        wandb.log = {
+            "WorldModel/reconstruction_loss": reconstruction_loss.item(),
+            "WorldModel/reward_loss": reward_loss.item(),
+            "WorldModel/termination_loss": termination_loss.item(),
+            "WorldModel/dynamics_loss": dynamics_loss.item(),
+            "WorldModel/representation_loss": representation_loss.item(),
+            "WorldModel/total_loss": total_loss.item(),
+            "sep_loss/1.mean_jsd": stats["mean_jsd"],
+            "sep_loss/1.std_jsd": stats["std_jsd"],
+            "sep_loss/2.pairwise_mse_mean": stats["pairwise_mse_mean"],
+            "sep_loss/2.pairwise_mse_std": stats["pairwise_mse_std"],
+            "sep_loss/3.sotf_att": stats["soft_att"],
+            "sep_loss/3.soft_rep": stats["soft_rep"],
+            "sep_loss/4.loss_att": stats["loss_att"],
+            "sep_loss/4.loss_rep": stats["loss_rep"],
+            "sep_loss/5.att_pairs_ratio": stats["att_pairs_ratio"],
+            "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
+            "sep_loss/6.threshold": self.sep_threshold.item(),
+            "sep_loss/6.sep_threshold_grad": stats["sep_threshold_grad"]
+        }
+        
+        # if logger is not None:
+            # logger.log("WorldModel/reconstruction_loss", reconstruction_loss.item())
+            # logger.log("WorldModel/reward_loss", reward_loss.item())
+            # logger.log("WorldModel/termination_loss", termination_loss.item())
+            # logger.log("WorldModel/dynamics_loss", dynamics_loss.item())
+            # logger.log("WorldModel/dynamics_real_kl_div", dynamics_real_kl_div.item())
+            # logger.log("WorldModel/representation_loss", representation_loss.item())
+            # logger.log("WorldModel/representation_real_kl_div", representation_real_kl_div.item())
+            # logger.log("WorldModel/total_loss", total_loss.item())
+            # logger.log("sep_loss/1.mean_jsd", stats["mean_jsd"])
+            # logger.log("sep_loss/1.std_jsd", stats["std_jsd"])
+            # logger.log("sep_loss/2.pairwise_mse_mean", stats["pairwise_mse_mean"])
+            # logger.log("sep_loss/2.pairwise_mse_std", stats["pairwise_mse_std"])
+            # logger.log("sep_loss/3.sotf_att", stats["soft_att"])
+            # logger.log("sep_loss/3.soft_rep", stats["sotf_rep"])
+            # logger.log("sep_loss/4.loss_att", stats["loss_att"])
+            # logger.log("sep_loss/4.loss_rep", stats["loss_rep"])
+            # logger.log("sep_loss/5.att_pairs_ratio", stats["att_pairs_ratio"])
+            # logger.log("sep_loss/5.rep_pairs_ratio", stats["rep_pairs_ratio"])
+            # logger.log("sep_loss/6.threshold", self.sep_threshold.item())
+            # logger.log("sep_loss/6.sep_threshold_grad", stats["sep_threshold_grad"])
             
 

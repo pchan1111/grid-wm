@@ -77,16 +77,16 @@ def load_config(config_path):
     conf.Models.WorldModel.TransformerHiddenDim = 0
     conf.Models.WorldModel.TransformerNumLayers = 0
     conf.Models.WorldModel.TransformerNumHeads = 0
-    conf.Models.WorldModel.LearningRate = 0
-    conf.Models.WorldModel.WeightDecay = 0
+    conf.Models.WorldModel.LearningRate = 0.0
+    conf.Models.WorldModel.WeightDecay = 0.0
     conf.Models.WorldModel.SeparationLoss = CN()
-    conf.Models.WorldModel.SeparationLoss.SeparationThreshold = 0
-    conf.Models.WorldModel.SeparationLoss.SeparationLossBalance = 0.01
-    conf.Models.WorldModel.SeparationLoss.SigmoidTemperature = 1.0
-    conf.Models.WorldModel.SeparationLoss.ExponentialTemperature = 0
-    conf.Models.WorldModel.SeparationLoss.AttractionLossGate = 0
-    conf.Models.WorldModel.SeparationLoss.RepulsionLossGate = 0
-    conf.Models.WorldModel.SeparationLoss.AttractionRepulsionRatio = 2.0
+    conf.Models.WorldModel.SeparationLoss.SeparationThreshold = 0.0
+    conf.Models.WorldModel.SeparationLoss.SeparationLossBalance = 0.0
+    conf.Models.WorldModel.SeparationLoss.SigmoidTemperature = 0.0
+    conf.Models.WorldModel.SeparationLoss.ExponentialTemperature = 0.0
+    conf.Models.WorldModel.SeparationLoss.AttractionLossGate = 0.0
+    conf.Models.WorldModel.SeparationLoss.RepulsionLossGate = 0.0
+    conf.Models.WorldModel.SeparationLoss.AttractionRepulsionRatio = 0.0
 
     conf.Models.Agent = CN()
     conf.Models.Agent.NumLayers = 0
@@ -94,6 +94,8 @@ def load_config(config_path):
     conf.Models.Agent.Gamma = 1.0
     conf.Models.Agent.Lambda = 0.0
     conf.Models.Agent.EntropyCoef = 0.0
+    conf.Models.Agent.LearningRate = 0.0
+    conf.Models.Agent.WeightDecay = 0.0
 
     conf.JointTrainAgent = CN()
     conf.JointTrainAgent.SampleMaxSteps = 0

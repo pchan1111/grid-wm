@@ -82,7 +82,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                                   batch_size, demonstration_batch_size, batch_length,
                                   imagine_batch_size, imagine_demonstration_batch_size,
                                   imagine_context_length, imagine_batch_length,
-                                  save_every_steps, seed, logger, conf):
+                                  save_every_steps, seed, logger):
     # create ckpt dir
     os.makedirs(f"ckpt/{args.n}", exist_ok=True)
 
@@ -130,9 +130,14 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
         if done_flag.any():
             for i in range(num_envs):
                 if done_flag[i]:
-                    logger.log(f"sample/{env_name}_reward", sum_reward[i])
-                    logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
-                    logger.log("replay_buffer/length", len(replay_buffer))
+                    # logger.log(f"sample/{env_name}_reward", sum_reward[i])
+                    # logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
+                    # logger.log("replay_buffer/length", len(replay_buffer))
+                    wandb.log = {
+                        f"sample/{env_name}_reward", sum_reward[i],
+                        f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4,
+                        "replay_buffer/length", len(replay_buffer)
+                    }
                     sum_reward[i] = 0
 
         # update current_obs, current_info and sum_reward
@@ -196,15 +201,7 @@ def build_world_model(conf, action_dim):
 
 
 def build_agent(conf, action_dim):
-    return agents.ActorCriticAgent(
-        feat_dim=32*32+conf.Models.WorldModel.TransformerHiddenDim,
-        num_layers=conf.Models.Agent.NumLayers,
-        hidden_dim=conf.Models.Agent.HiddenDim,
-        action_dim=action_dim,
-        gamma=conf.Models.Agent.Gamma,
-        lambd=conf.Models.Agent.Lambda,
-        entropy_coef=conf.Models.Agent.EntropyCoef,
-    ).cuda()
+    return agents.ActorCriticAgent(action_dim=action_dim, conf=conf).cuda()
 
 
 if __name__ == "__main__":
@@ -228,17 +225,16 @@ if __name__ == "__main__":
     # set seed
     seed_np_torch(seed=args.seed)
     # tensorboard writer
-    logger = Logger(path=f"runs/{args.n}")
+    # logger = Logger(path=f"runs/{args.n}")
+    logger = None
     # copy config file
-    shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
+    # shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
 
     # WandB
     wandb.init(
-        project = args.n,
-        config = {
-            "AdamW_weight_decay" : 1e-3,
-            "SepLoss_balance": 0.01
-        }
+        project = "grid-wm",
+        config = conf,
+        name = args.n
     )
 
 
@@ -287,8 +283,7 @@ if __name__ == "__main__":
             imagine_batch_length=conf.JointTrainAgent.ImagineBatchLength,
             save_every_steps=conf.JointTrainAgent.SaveEverySteps,
             seed=args.seed,
-            logger=logger,
-            conf=conf
+            logger=logger
         )
     else:
         raise NotImplementedError(f"Task {conf.Task} not implemented")

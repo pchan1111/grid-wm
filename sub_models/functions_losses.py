@@ -67,11 +67,11 @@ class SeparationLoss(nn.Module):
     def __init__(self, sep_threshold, conf):
         super().__init__()
         self.sep_threshold = sep_threshold
-        self.temperature = 1.0
+        self.temperature = conf.Models.WorldModel.SeparationLoss.SigmoidTemperature
         self.scaling_factor = 1.0
-        self.dist_temperature = 1.0
-        self.att_loss_gate = 0.45
-        self.rep_loss_gate = 0.15
+        self.dist_temperature = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
+        self.att_loss_gate = conf.Models.WorldModel.SeparationLoss.AttractionLossGate
+        self.rep_loss_gate = conf.Models.WorldModel.SeparationLoss.RepulsionLossGate
 
     def forward(self, prior, h):
         B, L, K, C = prior.shape
