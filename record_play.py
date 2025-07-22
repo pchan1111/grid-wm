@@ -1,6 +1,6 @@
 import gymnasium
 import argparse
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import cv2
 import numpy as np
 from einops import rearrange
@@ -44,7 +44,7 @@ def record_episode(env_name, image_size, num_episodes, output_path,
                    world_model: WorldModel, agent: agents.ActorCriticAgent, use_native_resolution: bool):
     
     print("Recording episode for env: " + colorama.Fore.YELLOW + f"{env_name}" + colorama.Style.RESET_ALL)
-    print(f"Collecting {num_episodes} episodes. Native resolution: {use_native_resolution}")
+    print(f"Collecting {num_episodes} episodes. Native resolution:" + colorama.Fore.YELLOW + f"{use_native_resolution}" + colorama.Style.RESET_ALL)
     print("Output video(s) will be based on: " + colorama.Fore.CYAN + f"{output_path}" + colorama.Style.RESET_ALL)
 
     output_dir = os.path.dirname(output_path)
@@ -117,7 +117,10 @@ def record_episode(env_name, image_size, num_episodes, output_path,
         
         # Use the extension from the provided output_path argument
         output_basename, output_ext = os.path.splitext(os.path.basename(output_path))
-        video_filename = f"{output_basename}_episode_{episode_idx}{output_ext}"
+        if use_native_resolution:
+            video_filename = f"{output_basename}_native_resolution_episode_{episode_idx}{output_ext}"
+        else:
+            video_filename = f"{output_basename}_episode_{episode_idx}{output_ext}"
         episode_video_path = os.path.join(output_dir, video_filename)
         
         # The video size is determined by the frame resolution (native or resized)

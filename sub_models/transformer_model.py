@@ -59,16 +59,16 @@ class StochasticTransformerKVCache(nn.Module):
         self.layer_stack = nn.ModuleList([
             AttentionBlockKVCache(feat_dim=feat_dim, hidden_dim=feat_dim*2, num_heads=num_heads, dropout=dropout) for _ in range(num_layers)
         ])
-        self.layer_norm = nn.LayerNorm(feat_dim, eps=1e-6)  # TODO: check if this is necessary
+        self.layer_norm = nn.LayerNorm(feat_dim, eps=1e-6)  
 
     def forward(self, samples, action, mask):
         '''
         Normal forward pass
         '''
-        action = F.one_hot(action.long(), self.action_dim).float()
+        action = F.one_hot(action.long(), self.action_dim).float() # (B, L, action_dim)
         feats = self.stem(torch.cat([samples, action], dim=-1))
         feats = self.position_encoding(feats)
-        feats = self.layer_norm(feats)
+        feats = self.layer_norm(feats) # (B, L, feat_dim)
 
         for layer in self.layer_stack:
             feats, attn = layer(feats, feats, feats, mask)

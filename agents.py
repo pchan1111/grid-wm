@@ -6,6 +6,7 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 import copy
 from torch.cuda.amp import autocast
+import wandb
 
 from sub_models.functions_losses import SymLogTwoHotLoss
 from utils import EMAScalar
@@ -35,13 +36,17 @@ def calc_lambda_return(rewards, values, termination, gamma, lam, dtype=torch.flo
 
 
 class ActorCriticAgent(nn.Module):
-    def __init__(self, feat_dim, num_layers, hidden_dim, action_dim, gamma, lambd, entropy_coef) -> None:
+    def __init__(self, action_dim, record_run, conf) -> None:
         super().__init__()
-        self.gamma = gamma
-        self.lambd = lambd
-        self.entropy_coef = entropy_coef
+        feat_dim = 32*32+conf.Models.WorldModel.TransformerHiddenDim
+        num_layers = conf.Models.Agent.NumLayers
+        hidden_dim = conf.Models.Agent.HiddenDim
+        self.gamma = conf.Models.Agent.Gamma
+        self.lambd = conf.Models.Agent.Lambda
+        self.entropy_coef = conf.Models.Agent.EntropyCoef
         self.use_amp = True
         self.tensor_dtype = torch.float16 if self.use_amp else torch.float32
+        self.record_run = record_run
 
         self.symlog_twohot_loss = SymLogTwoHotLoss(255, -20, 20)
 
@@ -82,7 +87,9 @@ class ActorCriticAgent(nn.Module):
         self.lowerbound_ema = EMAScalar(decay=0.99)
         self.upperbound_ema = EMAScalar(decay=0.99)
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=3e-5, eps=1e-5)
+        self.optimizer = torch.optim.AdamW(self.parameters(), 
+                                           lr=conf.Models.Agent.LearningRate, eps=1e-5, 
+                                           weight_decay=conf.Models.Agent.WeightDecay)
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     @torch.no_grad()
@@ -168,10 +175,20 @@ class ActorCriticAgent(nn.Module):
 
         self.update_slow_critic()
 
-        if logger is not None:
-            logger.log('ActorCritic/policy_loss', policy_loss.item())
-            logger.log('ActorCritic/value_loss', value_loss.item())
-            logger.log('ActorCritic/entropy_loss', entropy_loss.item())
-            logger.log('ActorCritic/S', S.item())
-            logger.log('ActorCritic/norm_ratio', norm_ratio.item())
-            logger.log('ActorCritic/total_loss', loss.item())
+        if self.record_run:
+            wandb.log({
+                'ActorCritic/policy_loss': policy_loss.item(),
+                'ActorCritic/value_loss': value_loss.item(),
+                'ActorCritic/entropy_loss': entropy_loss.item(),
+                'ActorCritic/S': S.item(),
+                'ActorCritic/norm_ratio': norm_ratio.item(),
+                'ActorCritic/total_loss': loss.item() 
+            })
+
+        # if logger is not None:
+        #     logger.log('ActorCritic/policy_loss', policy_loss.item())
+        #     logger.log('ActorCritic/value_loss', value_loss.item())
+        #     logger.log('ActorCritic/entropy_loss', entropy_loss.item())
+        #     logger.log('ActorCritic/S', S.item())
+        #     logger.log('ActorCritic/norm_ratio', norm_ratio.item())
+        #     logger.log('ActorCritic/total_loss', loss.item())

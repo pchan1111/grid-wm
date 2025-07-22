@@ -29,6 +29,17 @@ Models:
     TransformerHiddenDim: 512
     TransformerNumLayers: 2
     TransformerNumHeads: 8
+    LearningRate: 1e-4
+    WeightDecay: 1e-3
+    SeparationLoss:
+      SeparationThreshold: 8.3
+      SeparationLossBalance: 0.01
+      SigmoidTemperature: 1.0
+      ExponentialTemperature: 1.0
+      AttractionLossGate: 0.45
+      RepulsionLossGate: 0.15
+      AttractionRepulsionRatio: 2.0
+
 
   Agent:
     NumLayers: 2
@@ -36,3 +47,5 @@ Models:
     Gamma: 0.985
     Lambda: 0.95
     EntropyCoef: 3E-4
+    LearningRate: 3e-5
+    WeightDecay: 1e-3

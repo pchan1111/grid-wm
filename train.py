@@ -1,34 +1,35 @@
 import gymnasium
-import ale_py
+# import ale_py
 import argparse
-from tensorboardX import SummaryWriter
-import cv2
+# from torch.utils.tensorboard import SummaryWriter
+# import cv2
 import numpy as np
 from einops import rearrange
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+# import torch.nn as nn
+# import torch.nn.functional as F
 from collections import deque
 from tqdm import tqdm
-import copy
+# import copy
 import colorama
-import random
-import json
+# import random
+# import json
 import shutil
-import pickle
+# import pickle
 import os
+import wandb
 
 from utils import seed_np_torch, Logger, load_config
 from replay_buffer import ReplayBuffer
 import env_wrapper
 import agents
-from sub_models.functions_losses import symexp
+# from sub_models.functions_losses import symexp
 from sub_models.world_models import WorldModel, MSELoss
 
 
 def build_single_env(env_name, image_size, seed):
     env = gymnasium.make(env_name, full_action_space=False, render_mode="rgb_array", frameskip=1)
-    env = env_wrapper.SeedEnvWrapper(env, seed=seed)
+    env = env_wrapper.SeedEnvWrapper(env, seed=seed) # TODO: delete this wrapper if not needed
     env = env_wrapper.MaxLast2FrameSkipWrapper(env, skip=4)
     env = gymnasium.wrappers.ResizeObservation(env, shape=(image_size, image_size))
     env = env_wrapper.LifeLossInfo(env)
@@ -45,7 +46,7 @@ def build_vec_env(env_name, image_size, num_envs, seed):
     return vec_env
 
 
-def train_world_model_step(replay_buffer: ReplayBuffer, world_model: WorldModel, batch_size, demonstration_batch_size, batch_length, logger):
+def train_world_model_step(replay_buffer: ReplayBuffer, world_model: WorldModel, batch_size, demonstration_batch_size, batch_length, logger, conf):
     obs, action, reward, termination = replay_buffer.sample(batch_size, demonstration_batch_size, batch_length)
     world_model.update(obs, action, reward, termination, logger=logger)
 
@@ -81,7 +82,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                                   batch_size, demonstration_batch_size, batch_length,
                                   imagine_batch_size, imagine_demonstration_batch_size,
                                   imagine_context_length, imagine_batch_length,
-                                  save_every_steps, seed, logger):
+                                  save_every_steps, seed, logger, record_run):
     # create ckpt dir
     os.makedirs(f"ckpt/{args.n}", exist_ok=True)
 
@@ -106,16 +107,16 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
             agent.eval()
             with torch.no_grad():
                 if len(context_action) == 0:
-                    action = vec_env.action_space.sample()
+                    action = vec_env.action_space.sample() # (num_envs, )
                 else:
-                    context_latent = world_model.encode_obs(torch.cat(list(context_obs), dim=1))
-                    model_context_action = np.stack(list(context_action), axis=1)
+                    context_latent = world_model.encode_obs(torch.cat(list(context_obs), dim=1)) # (num_envs, queue_length, 32*32)
+                    model_context_action = np.stack(list(context_action), axis=1) # (num_envs, queue_length)
                     model_context_action = torch.Tensor(model_context_action).cuda()
-                    prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action)
+                    prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action) # (num_envs, 1, 1024), (num_envs,1, 32*32)
                     action = agent.sample_as_env_action(
                         torch.cat([prior_flattened_sample, last_dist_feat], dim=-1),
                         greedy=False
-                    )
+                    ) # (num_envs, )
 
             context_obs.append(rearrange(torch.Tensor(current_obs).cuda(), "B H W C -> B 1 C H W")/255)
             context_action.append(action)
@@ -129,10 +130,16 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
         if done_flag.any():
             for i in range(num_envs):
                 if done_flag[i]:
-                    logger.log(f"sample/{env_name}_reward", sum_reward[i])
-                    logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
-                    logger.log("replay_buffer/length", len(replay_buffer))
-                    sum_reward[i] = 0
+                    # logger.log(f"sample/{env_name}_reward", sum_reward[i])
+                    # logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
+                    # logger.log("replay_buffer/length", len(replay_buffer))
+                    if record_run:
+                        wandb.log({
+                            f"sample/{env_name}_reward": sum_reward[i],
+                            f"sample/{env_name}_episode_steps": current_info["episode_frame_number"][i]//4,
+                            "replay_buffer/length": len(replay_buffer)
+                        })
+                        sum_reward[i] = 0
 
         # update current_obs, current_info and sum_reward
         sum_reward += reward
@@ -148,14 +155,15 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                 batch_size=batch_size,
                 demonstration_batch_size=demonstration_batch_size,
                 batch_length=batch_length,
-                logger=logger
+                logger=logger,
+                conf=conf
             )
         # <<< train world model part
 
         # train agent part >>>
         if replay_buffer.ready() and total_steps % (train_agent_every_steps//num_envs) == 0 and total_steps*num_envs >= 0:
             if total_steps % (save_every_steps//num_envs) == 0:
-                log_video = True
+                log_video = False # True
             else:
                 log_video = False
 
@@ -189,27 +197,12 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
             torch.save(agent.state_dict(), f"ckpt/{args.n}/agent_{total_steps}.pth")
 
 
-def build_world_model(conf, action_dim):
-    return WorldModel(
-        in_channels=conf.Models.WorldModel.InChannels,
-        action_dim=action_dim,
-        transformer_max_length=conf.Models.WorldModel.TransformerMaxLength,
-        transformer_hidden_dim=conf.Models.WorldModel.TransformerHiddenDim,
-        transformer_num_layers=conf.Models.WorldModel.TransformerNumLayers,
-        transformer_num_heads=conf.Models.WorldModel.TransformerNumHeads
-    ).cuda()
+def build_world_model(action_dim, record_run, conf):
+    return WorldModel(action_dim=action_dim, record_run=record_run,  conf=conf).cuda()
 
 
-def build_agent(conf, action_dim):
-    return agents.ActorCriticAgent(
-        feat_dim=32*32+conf.Models.WorldModel.TransformerHiddenDim,
-        num_layers=conf.Models.Agent.NumLayers,
-        hidden_dim=conf.Models.Agent.HiddenDim,
-        action_dim=action_dim,
-        gamma=conf.Models.Agent.Gamma,
-        lambd=conf.Models.Agent.Lambda,
-        entropy_coef=conf.Models.Agent.EntropyCoef,
-    ).cuda()
+def build_agent(action_dim, record_run, conf):
+    return agents.ActorCriticAgent(action_dim=action_dim, record_run=record_run, conf=conf ).cuda()
 
 
 if __name__ == "__main__":
@@ -226,6 +219,7 @@ if __name__ == "__main__":
     parser.add_argument("-config_path", type=str, required=True)
     parser.add_argument("-env_name", type=str, required=True)
     parser.add_argument("-trajectory_path", type=str, required=True)
+    parser.add_argument("-record_run", action="store_true")
     args = parser.parse_args()
     conf = load_config(args.config_path)
     print(colorama.Fore.RED + str(args) + colorama.Style.RESET_ALL)
@@ -233,19 +227,31 @@ if __name__ == "__main__":
     # set seed
     seed_np_torch(seed=args.seed)
     # tensorboard writer
-    logger = Logger(path=f"runs/{args.n}")
+    # logger = Logger(path=f"runs/{args.n}")
+    logger = None
     # copy config file
-    shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
+    if args.record_run:
+        shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
+
+    # WandB
+    if args.record_run:
+        wandb.init(
+            project = "grid-wm",
+            config = conf,
+            name = args.n
+        )
+
 
     # distinguish between tasks, other debugging options are removed for simplicity
     if conf.Task == "JointTrainAgent":
         # getting action_dim with dummy env
         dummy_env = build_single_env(args.env_name, conf.BasicSettings.ImageSize, seed=0)
         action_dim = dummy_env.action_space.n
+        print('action_dim: ', action_dim)
 
         # build world model and agent
-        world_model = build_world_model(conf, action_dim)
-        agent = build_agent(conf, action_dim)
+        world_model = build_world_model(action_dim, args.record_run, conf)
+        agent = build_agent(action_dim, args.record_run, conf)
 
         # build replay buffer
         replay_buffer = ReplayBuffer(
@@ -281,7 +287,8 @@ if __name__ == "__main__":
             imagine_batch_length=conf.JointTrainAgent.ImagineBatchLength,
             save_every_steps=conf.JointTrainAgent.SaveEverySteps,
             seed=args.seed,
-            logger=logger
+            logger=logger,
+            record_run=args.record_run
         )
     else:
         raise NotImplementedError(f"Task {conf.Task} not implemented")
