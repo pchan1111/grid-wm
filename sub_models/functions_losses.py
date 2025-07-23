@@ -68,7 +68,7 @@ class SeparationLoss(nn.Module):
         super().__init__()
         self.sep_threshold = sep_threshold
         self.temperature = conf.Models.WorldModel.SeparationLoss.SigmoidTemperature
-        self.scaling_factor = 1.0
+        self.scaling_factor = conf.Models.WorldModel.SeparationLoss.ScalingFactor
         self.dist_temperature = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
         self.att_loss_gate = conf.Models.WorldModel.SeparationLoss.AttractionLossGate
         self.rep_loss_gate = conf.Models.WorldModel.SeparationLoss.RepulsionLossGate
@@ -91,7 +91,7 @@ class SeparationLoss(nn.Module):
         kl_q_m = torch.distributions.kl.kl_divergence(dist_p2, dist_m)
 
         jsd_matrix= 0.5 * (kl_p_m + kl_q_m)
-        jsd_matrix = jsd_matrix.sum(dim=-1) * self.scaling_factor # (B, L, L)
+        jsd_matrix = jsd_matrix.mean(dim=-1) * self.scaling_factor # (B, L, L)
 
         # --- 2. Calculate two masks ---
         triu_mask = torch.triu(torch.ones(L, L, device=prior.device), diagonal=1)

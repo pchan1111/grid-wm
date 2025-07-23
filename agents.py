@@ -90,6 +90,7 @@ class ActorCriticAgent(nn.Module):
         self.optimizer = torch.optim.AdamW(self.parameters(), 
                                            lr=conf.Models.Agent.LearningRate, eps=1e-5, 
                                            weight_decay=conf.Models.Agent.WeightDecay)
+        # self.optimizer = torch.optim.Adam(self.parameters(), lr=conf.Models.Agent.LearningRate, eps=1e-5)
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     @torch.no_grad()
@@ -133,7 +134,7 @@ class ActorCriticAgent(nn.Module):
         action = self.sample(latent, greedy)
         return action.detach().cpu().squeeze(-1).numpy()
 
-    def update(self, latent, action, old_logprob, old_value, reward, termination, logger=None):
+    def update(self, latent, action, old_logprob, old_value, reward, termination, total_steps, logger=None):
         '''
         Update policy and value model
         '''
@@ -183,7 +184,7 @@ class ActorCriticAgent(nn.Module):
                 'ActorCritic/S': S.item(),
                 'ActorCritic/norm_ratio': norm_ratio.item(),
                 'ActorCritic/total_loss': loss.item() 
-            })
+            }, step=total_steps)
 
         # if logger is not None:
         #     logger.log('ActorCritic/policy_loss', policy_loss.item())

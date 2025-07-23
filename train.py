@@ -46,9 +46,9 @@ def build_vec_env(env_name, image_size, num_envs, seed):
     return vec_env
 
 
-def train_world_model_step(replay_buffer: ReplayBuffer, world_model: WorldModel, batch_size, demonstration_batch_size, batch_length, logger, conf):
+def train_world_model_step(replay_buffer: ReplayBuffer, world_model: WorldModel, batch_size, demonstration_batch_size, batch_length, logger, total_steps):
     obs, action, reward, termination = replay_buffer.sample(batch_size, demonstration_batch_size, batch_length)
-    world_model.update(obs, action, reward, termination, logger=logger)
+    world_model.update(obs, action, reward, termination, total_steps, logger=logger)
 
 
 @torch.no_grad()
@@ -138,7 +138,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                             f"sample/{env_name}_reward": sum_reward[i],
                             f"sample/{env_name}_episode_steps": current_info["episode_frame_number"][i]//4,
                             "replay_buffer/length": len(replay_buffer)
-                        })
+                        }, step=total_steps)
                         sum_reward[i] = 0
 
         # update current_obs, current_info and sum_reward
@@ -156,7 +156,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                 demonstration_batch_size=demonstration_batch_size,
                 batch_length=batch_length,
                 logger=logger,
-                conf=conf
+                total_steps=total_steps
             )
         # <<< train world model part
 
@@ -186,7 +186,8 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                 old_value=agent_value,
                 reward=imagine_reward,
                 termination=imagine_termination,
-                logger=logger
+                logger=logger,
+                total_steps=total_steps
             )
         # <<< train agent part
 

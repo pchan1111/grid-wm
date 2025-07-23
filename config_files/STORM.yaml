@@ -32,13 +32,14 @@ Models:
     LearningRate: 1e-4
     WeightDecay: 1e-3
     SeparationLoss:
-      SeparationThreshold: 8.3
+      SeparationThreshold: 3.0
       SeparationLossBalance: 0.01
       SigmoidTemperature: 1.0
       ExponentialTemperature: 3.0
       AttractionLossGate: 0.45
       RepulsionLossGate: 0.15
-      AttractionRepulsionRatio: 2.0
+      AttractionRepulsionRatio: 1.0
+      ScalingFactor: 32.0
 
 
   Agent:

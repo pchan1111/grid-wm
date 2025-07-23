@@ -231,8 +231,10 @@ class WorldModel(nn.Module):
         self.log_sigma_dyn = nn.Parameter(-torch.tensor(1.0))
         self.log_sigma_att = nn.Parameter(-torch.tensor(1.0)) 
         self.log_sigma_rep = nn.Parameter(-torch.tensor(1.0))
+        self.log_sigma_cap = nn.Parameter(-torch.tensor(1.0))
         # for separation loss
-        self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
+        # self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
+        self.sep_threshold = torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold)
         self.record_run= record_run
         self.att_rep_ratio = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
         self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
@@ -283,6 +285,7 @@ class WorldModel(nn.Module):
         self.optimizer = torch.optim.AdamW(self.parameters(), 
                                            lr=conf.Models.WorldModel.LearningRate, 
                                            weight_decay=conf.Models.WorldModel.WeightDecay)
+        # self.optimizer = torch.optim.Adam(self.parameters(), lr=conf.Models.WorldModel.LearningRate)
         # self.model_params = []
         # self.sep_threshold_params = []
         # for name, param in self.named_parameters():
@@ -400,7 +403,7 @@ class WorldModel(nn.Module):
 
         return torch.cat([self.latent_buffer, self.hidden_buffer], dim=-1), self.action_buffer, self.reward_hat_buffer, self.termination_hat_buffer
 
-    def update(self, obs, action, reward, termination, logger=None):
+    def update(self, obs, action, reward, termination, total_steps, logger=None):
         self.train()
         batch_size, batch_length = obs.shape[:2]
 
@@ -446,6 +449,7 @@ class WorldModel(nn.Module):
             sigma_dyn = torch.exp(self.log_sigma_dyn)
             sigma_att = torch.exp(self.log_sigma_att)
             sigma_rep = torch.exp(self.log_sigma_rep)
+            sigma_cap = torch.exp(self.log_sigma_cap)
 
             # Calculate rectified Harmonious Loss
             harmonized_obs_loss = sigma_obs * obs_loss + torch.log(1 + sigma_obs)
@@ -453,11 +457,12 @@ class WorldModel(nn.Module):
             harmonized_dynamics_loss = sigma_dyn * dynamics_loss_group + torch.log(1 + sigma_dyn)
             harmonized_att_loss = sigma_att * loss_att + torch.log(1 + sigma_att)
             harmonized_rep_loss = sigma_rep * loss_rep + torch.log(1 + sigma_rep)
+            harmonized_cap_loss = sigma_cap * (dist_feat.mean() ** 2) + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
             if self.i > 20000: 
-                total_loss += self.sep_loss_balance * (harmonized_att_loss + self.att_rep_ratio * harmonized_rep_loss)
+                total_loss += self.sep_loss_balance * (harmonized_att_loss + self.att_rep_ratio * harmonized_rep_loss) #+ harmonized_cap_loss)
             self.i += 1
             # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
 
@@ -481,6 +486,11 @@ class WorldModel(nn.Module):
                 "WorldModel/termination_loss": termination_loss.item(),
                 "WorldModel/dynamics_loss": dynamics_loss.item(),
                 "WorldModel/representation_loss": representation_loss.item(),
+                "WorldModel/harmonized_obs_loss": harmonized_obs_loss.item(),
+                "WorldModel/harmonized_reward_loss": harmonized_reward_loss.item(),
+                "WorldModel/harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
+                "WorldModel/harmonized_att_loss": harmonized_att_loss.item(),
+                "WorldModel/harmonized_rep_loss": harmonized_rep_loss.item(),
                 "WorldModel/total_loss": total_loss.item(),
                 "sep_loss/1.mean_jsd": stats["mean_jsd"],
                 "sep_loss/1.std_jsd": stats["std_jsd"],
@@ -496,7 +506,7 @@ class WorldModel(nn.Module):
                 "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
                 "sep_loss/6.threshold": self.sep_threshold.item(),
                 "sep_loss/6.sep_threshold_grad": stats["sep_threshold_grad"]
-            })
+            }, step=total_steps)
         
         # if logger is not None:
             # logger.log("WorldModel/reconstruction_loss", reconstruction_loss.item())
