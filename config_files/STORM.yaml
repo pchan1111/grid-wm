@@ -33,9 +33,9 @@ Models:
     WeightDecay: 1e-3
     SeparationLoss:
       SeparationThreshold: 3.0
-      SeparationLossBalance: 0.01
+      SeparationLossBalance: 0.001
       SigmoidTemperature: 1.0
-      ExponentialTemperature: 3.0
+      ExponentialTemperature: 2.0
       AttractionLossGate: 0.45
       RepulsionLossGate: 0.15
       AttractionRepulsionRatio: 1.0

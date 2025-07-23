@@ -228,7 +228,7 @@ class WorldModel(nn.Module):
         # for HarmonyDream
         self.log_sigma_obs = nn.Parameter(-torch.tensor(1.0))
         self.log_sigma_reward = nn.Parameter(-torch.tensor(1.0))
-        self.log_sigma_dyn = nn.Parameter(-torch.tensor(1.0))
+        self.log_sigma_dyn = nn.Parameter(-torch.tensor(0.5))
         self.log_sigma_att = nn.Parameter(-torch.tensor(1.0)) 
         self.log_sigma_rep = nn.Parameter(-torch.tensor(1.0))
         self.log_sigma_cap = nn.Parameter(-torch.tensor(1.0))
@@ -460,9 +460,9 @@ class WorldModel(nn.Module):
             harmonized_cap_loss = sigma_cap * (dist_feat.mean() ** 2) + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
-            total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
+            # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
             if self.i > 20000: 
-                total_loss += self.sep_loss_balance * (harmonized_att_loss + self.att_rep_ratio * harmonized_rep_loss) #+ harmonized_cap_loss)
+                total_loss += self.sep_loss_balance * (harmonized_att_loss + self.att_rep_ratio * harmonized_rep_loss + harmonized_cap_loss)
             self.i += 1
             # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
 
@@ -491,6 +491,7 @@ class WorldModel(nn.Module):
                 "WorldModel/harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
                 "WorldModel/harmonized_att_loss": harmonized_att_loss.item(),
                 "WorldModel/harmonized_rep_loss": harmonized_rep_loss.item(),
+                "WorldModel/harmonized_cap_loss": harmonized_cap_loss.item(),
                 "WorldModel/total_loss": total_loss.item(),
                 "sep_loss/1.mean_jsd": stats["mean_jsd"],
                 "sep_loss/1.std_jsd": stats["std_jsd"],
