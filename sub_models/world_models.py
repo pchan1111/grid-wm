@@ -438,8 +438,7 @@ class WorldModel(nn.Module):
             loss_att, loss_rep, stats = self.separation_loss_func(prior_logits, dist_feat)
 
             # capacity loss
-            cap_loss = dist_feat.sum(dim=-1) ** 2
-            cap_loss = -cap_loss.mean()
+            cap_loss = -(dist_feat.mean() ** 2)
 
             # HarmonyDream >>>
             # group losses
