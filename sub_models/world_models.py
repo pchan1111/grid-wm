@@ -437,6 +437,10 @@ class WorldModel(nn.Module):
             # Separation loss
             loss_att, loss_rep, stats = self.separation_loss_func(prior_logits, dist_feat)
 
+            # capacity loss
+            cap_loss = dist_feat.sum(dim=-1) ** 2
+            cap_loss = -cap_loss.mean()
+
             # HarmonyDream >>>
             # group losses
             obs_loss = reconstruction_loss
@@ -457,7 +461,7 @@ class WorldModel(nn.Module):
             harmonized_dynamics_loss = sigma_dyn * dynamics_loss_group + torch.log(1 + sigma_dyn)
             harmonized_att_loss = sigma_att * loss_att + torch.log(1 + sigma_att)
             harmonized_rep_loss = sigma_rep * loss_rep + torch.log(1 + sigma_rep)
-            harmonized_cap_loss = sigma_cap * (dist_feat.mean() ** 2) + torch.log(1 + sigma_cap)
+            harmonized_cap_loss = sigma_cap * cap_loss + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
