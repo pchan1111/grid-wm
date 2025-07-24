@@ -252,7 +252,8 @@ class WorldModel(nn.Module):
             num_layers=conf.Models.WorldModel.TransformerNumLayers,
             num_heads=conf.Models.WorldModel.TransformerNumHeads,
             max_length=conf.Models.WorldModel.TransformerMaxLength,
-            dropout=0.1
+            dropout=0.1,
+            hyper_sphere_r = conf.Models.WorldModel.HyperSphereRadius
         )
         self.dist_head = DistHead(
             image_feat_dim=self.encoder.last_channels*self.final_feature_width*self.final_feature_width,

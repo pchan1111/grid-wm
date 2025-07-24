@@ -79,6 +79,7 @@ def load_config(config_path):
     conf.Models.WorldModel.TransformerNumHeads = 0
     conf.Models.WorldModel.LearningRate = 0.0
     conf.Models.WorldModel.WeightDecay = 0.0
+    conf.Models.WorldModel.HyperSphereRadius = 0.0
     conf.Models.WorldModel.SeparationLoss = CN()
     conf.Models.WorldModel.SeparationLoss.SeparationThreshold = 0.0
     conf.Models.WorldModel.SeparationLoss.SeparationLossBalance = 0.0

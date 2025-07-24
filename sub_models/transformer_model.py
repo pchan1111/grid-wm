@@ -42,7 +42,7 @@ class StochasticTransformer(nn.Module):
 
 
 class StochasticTransformerKVCache(nn.Module):
-    def __init__(self, stoch_dim, action_dim, feat_dim, num_layers, num_heads, max_length, dropout):
+    def __init__(self, stoch_dim, action_dim, feat_dim, num_layers, num_heads, max_length, dropout, hyper_sphere_r):
         super().__init__()
         self.action_dim = action_dim
         self.feat_dim = feat_dim
@@ -59,7 +59,8 @@ class StochasticTransformerKVCache(nn.Module):
         self.layer_stack = nn.ModuleList([
             AttentionBlockKVCache(feat_dim=feat_dim, hidden_dim=feat_dim*2, num_heads=num_heads, dropout=dropout) for _ in range(num_layers)
         ])
-        self.layer_norm = nn.LayerNorm(feat_dim, eps=1e-6)  
+        self.layer_norm = nn.LayerNorm(feat_dim, eps=1e-6) 
+        self.root_hyper_sphere_r = hyper_sphere_r ** 0.5 
 
     def forward(self, samples, action, mask):
         '''
@@ -73,7 +74,9 @@ class StochasticTransformerKVCache(nn.Module):
         for layer in self.layer_stack:
             feats, attn = layer(feats, feats, feats, mask)
 
-        # feats = F.sigmoid(feats)
+        norm = torch.linalg.norm(feats, ord=2, dim=-1, keepdim=True)
+        feats = feats * self.root_hyper_sphere_r / norm
+        
         return feats
 
     def reset_kv_cache_list(self, batch_size, dtype):
