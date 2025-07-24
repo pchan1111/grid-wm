@@ -36,8 +36,8 @@ Models:
       SeparationLossBalance: 0.01
       SigmoidTemperature: 1.0
       ExponentialTemperature: 1.0
-      AttractionLossGate: 0.45
-      RepulsionLossGate: 0.15
+      AttractionLossGate: 0.15
+      RepulsionLossGate: 0.05
       AttractionRepulsionRatio: 1.0
       ScalingFactor: 32.0
 

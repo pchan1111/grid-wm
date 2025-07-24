@@ -130,8 +130,8 @@ if __name__ == "__main__":
     import train
     dummy_env = build_single_env(args.env_name, conf.BasicSettings.ImageSize)
     action_dim = dummy_env.action_space.n
-    world_model = train.build_world_model(conf, action_dim)
-    agent = train.build_agent(conf, action_dim)
+    world_model = train.build_world_model(action_dim, False, conf)
+    agent = train.build_agent(action_dim, False, conf)
     root_path = f"ckpt/{args.run_name}"
 
     import glob
