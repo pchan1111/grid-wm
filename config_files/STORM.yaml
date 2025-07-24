@@ -29,15 +29,15 @@ Models:
     TransformerHiddenDim: 512
     TransformerNumLayers: 2
     TransformerNumHeads: 8
-    LearningRate: 1e-3
+    LearningRate: 2e-4
     WeightDecay: 1e-2
     SeparationLoss:
       SeparationThreshold: 3.0
       SeparationLossBalance: 0.01
       SigmoidTemperature: 1.0
       ExponentialTemperature: 1.0
-      AttractionLossGate: 0.15
-      RepulsionLossGate: 0.05
+      AttractionLossGate: 0.45
+      RepulsionLossGate: 0.15
       AttractionRepulsionRatio: 1.0
       ScalingFactor: 32.0
 

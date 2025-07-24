@@ -73,7 +73,7 @@ class StochasticTransformerKVCache(nn.Module):
         for layer in self.layer_stack:
             feats, attn = layer(feats, feats, feats, mask)
 
-        feats = F.sigmoid(feats)
+        # feats = F.sigmoid(feats)
         return feats
 
     def reset_kv_cache_list(self, batch_size, dtype):
