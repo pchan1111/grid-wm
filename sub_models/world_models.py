@@ -231,7 +231,7 @@ class WorldModel(nn.Module):
         self.sigma_dyn = nn.Parameter(torch.tensor(0.0))
         self.sigma_att = nn.Parameter(torch.tensor(0.0))
         self.sigma_rep = nn.Parameter(torch.tensor(0.0))
-        self.sigma_cap = nn.Parameter(torch.tensor(0.0))
+        self.sigma_cap = nn.Parameter(torch.tensor(60.0))
         # for separation loss
         self.sep_threshold = torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold)
         self.record_run= record_run
@@ -444,7 +444,7 @@ class WorldModel(nn.Module):
             sigma_dyn = torch.exp(self.sigma_dyn)
             sigma_att = torch.exp(self.sigma_att)
             sigma_rep = torch.exp(self.sigma_rep)
-            sigma_cap = -torch.exp(self.sigma_cap) # cap_loss is negative, so we use -sigma_cap
+            sigma_cap = torch.exp(self.sigma_cap) 
 
             # Calculate rectified Harmonious Loss
             harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
@@ -452,7 +452,7 @@ class WorldModel(nn.Module):
             harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
             harmonized_att_loss = att_loss / sigma_att + torch.log(1 + sigma_att)
             harmonized_rep_loss = rep_loss / sigma_rep + torch.log(1 + sigma_rep)
-            harmonized_cap_loss = cap_loss / sigma_cap + torch.log(1 + sigma_cap)
+            harmonized_cap_loss = cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
