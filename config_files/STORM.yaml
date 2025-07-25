@@ -40,7 +40,7 @@ Models:
       ExponentialTemperature: 2.0
       AttractionLossGate: 0.45
       RepulsionLossGate: 0.15
-      RepulsionCoefficient: 1.0
+      RepulsionCoefficient: 1.2
       ScalingFactor: 32.0
 
 

@@ -231,7 +231,7 @@ class WorldModel(nn.Module):
         self.sigma_dyn = nn.Parameter(torch.tensor(0.0))
         self.sigma_att = nn.Parameter(torch.tensor(0.0))
         self.sigma_rep = nn.Parameter(torch.tensor(0.0))
-        self.sigma_cap = nn.Parameter(torch.tensor(60.0))
+        self.sigma_cap = nn.Parameter(torch.tensor(4.5))
         # for separation loss
         self.sep_threshold = torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold)
         self.record_run= record_run
