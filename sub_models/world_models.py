@@ -452,7 +452,7 @@ class WorldModel(nn.Module):
             harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
             harmonized_att_loss = att_loss / sigma_att + torch.log(1 + sigma_att)
             harmonized_rep_loss = rep_loss / sigma_rep + torch.log(1 + sigma_rep)
-            harmonized_cap_loss = cap_loss / sigma_cap + torch.log(1 + sigma_cap)
+            harmonized_cap_loss = cap_loss / sigma_cap + torch.log(1 - sigma_cap)
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
