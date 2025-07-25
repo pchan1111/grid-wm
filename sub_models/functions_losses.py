@@ -68,6 +68,7 @@ class SeparationLoss(nn.Module):
         super().__init__()
         self.sep_threshold = sep_threshold
         self.scaling_factor = conf.Models.WorldModel.SeparationLoss.ScalingFactor
+        self.exp_tmp = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
         self.att_loss_gate = conf.Models.WorldModel.SeparationLoss.AttractionLossGate
         self.rep_loss_gate = conf.Models.WorldModel.SeparationLoss.RepulsionLossGate
 
@@ -104,13 +105,13 @@ class SeparationLoss(nn.Module):
         pairwise_mse = ((h1 - h2)**2).mean(dim=-1) # (B, L, L)
 
         # Attraction loss
-        loss_att = (pairwise_mse * att_mask).sum() / (att_mask.sum() + eps)
-        loss_att = torch.where(loss_att > self.att_loss_gate, loss_att, 0.0)
+        att_loss = (pairwise_mse * att_mask).sum() / (att_mask.sum() + eps)
+        att_loss = torch.where(att_loss > self.att_loss_gate, att_loss, 0.0)
 
         # Repulsion loss
-        repulsion_enery = torch.exp(-pairwise_mse / self.dist_temperature)
-        loss_rep = (repulsion_enery * rep_mask).sum() / (rep_mask.sum() + eps)
-        loss_rep = torch.where(loss_rep > self.rep_loss_gate, loss_rep, 0.0)
+        repulsion_enery = torch.exp(-pairwise_mse / self.exp_tmp)
+        rep_loss = (repulsion_enery * rep_mask).sum() / (rep_mask.sum() + eps)
+        rep_loss = torch.where(rep_loss > self.rep_loss_gate, rep_loss, 0.0)
 
         # --- 5. Statistics for debugging ---
         stats = {}
@@ -118,14 +119,14 @@ class SeparationLoss(nn.Module):
         stats["pairwise_mse_std"] = pairwise_mse.std().item()
         stats["att_pairs_ratio"] = (att_mask.sum() / (triu_mask.sum() * B)).item()
         stats["rep_pairs_ratio"] = (rep_mask.sum() / (triu_mask.sum() * B)).item()
-        stats["loss_att"] = loss_att.item()
-        stats["loss_rep"] = loss_rep.item()
+        stats["att_loss"] = att_loss.item()
+        stats["rep_loss"] = rep_loss.item()
         
         valid_jsd_values = jsd_matrix[triu_mask.unsqueeze(0).expand(B, L, L).bool()]
         stats["mean_jsd"] = valid_jsd_values.mean().item()
         stats["std_jsd"] = valid_jsd_values.std().item()
 
-        return  loss_att, loss_rep, stats
+        return  att_loss, rep_loss, stats
     
 if __name__ == "__main__":
     loss_func = SymLogTwoHotLoss(255, -20, 20)

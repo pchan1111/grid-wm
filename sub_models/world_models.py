@@ -426,7 +426,7 @@ class WorldModel(nn.Module):
             representation_loss, representation_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:], prior_logits[:, :-1].detach())
             
             # Separation loss
-            loss_att, loss_rep, stats = self.separation_loss_func(prior_logits, dist_feat)
+            att_loss, rep_loss, stats = self.separation_loss_func(prior_logits, dist_feat)
 
             # capacity loss
             cap_loss = reduce(dist_feat, "B L D -> D", "mean")
@@ -450,8 +450,8 @@ class WorldModel(nn.Module):
             harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
             harmonized_reward_loss = reward_loss_group / sigma_obs + torch.log(1 + sigma_reward)
             harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
-            harmonized_att_loss = loss_att / sigma_att + torch.log(1 + sigma_att)
-            harmonized_rep_loss = loss_rep / sigma_rep + torch.log(1 + sigma_rep)
+            harmonized_att_loss = att_loss / sigma_att + torch.log(1 + sigma_att)
+            harmonized_rep_loss = rep_loss / sigma_rep + torch.log(1 + sigma_rep)
             harmonized_cap_loss = cap_loss / sigma_cap + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
@@ -472,26 +472,30 @@ class WorldModel(nn.Module):
         self.scaler.update()
         self.optimizer.zero_grad(set_to_none=True)
 
+
         if self.record_run:
             wandb.log({
-                "WorldModel/1.reconstruction_loss": reconstruction_loss.item(),
-                "WorldModel/2.reward_loss": reward_loss.item(),
-                "WorldModel/3.termination_loss": termination_loss.item(),
-                "WorldModel/4.dynamics_loss": dynamics_loss.item(),
-                "WorldModel/5.representation_loss": representation_loss.item(),
-                "WorldModel/6.harmonized_obs_loss": harmonized_obs_loss.item(),
-                "WorldModel/7.harmonized_reward_loss": harmonized_reward_loss.item(),
-                "WorldModel/8.harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
-                "WorldModel/9.harmonized_att_loss": harmonized_att_loss.item(),
-                "WorldModel/10.harmonized_rep_loss": harmonized_rep_loss.item(),
-                "WorldModel/11.harmonized_cap_loss": harmonized_cap_loss.item(),
-                "WorldModel/12.total_loss": total_loss.item(),
+                "WorldModel/1.0.reconstruction_loss": reconstruction_loss.item(),
+                "WorldModel/1.1.reward_loss": reward_loss.item(),
+                "WorldModel/1.2.termination_loss": termination_loss.item(),
+                "WorldModel/1.3.dynamics_loss": dynamics_loss.item(),
+                "WorldModel/1.4.representation_loss": representation_loss.item(), 
+                "WorldModel/1.5.att_loss": att_loss.item(),
+                "WorldModel/1.6.rep_loss": rep_loss.item(),
+                "WorldModel/1.7.cap_loss": cap_loss.item(), 
+                "WorldModel/1.8.harmonized_obs_loss": harmonized_obs_loss.item(),
+                "WorldModel/2.0.harmonized_reward_loss": harmonized_reward_loss.item(),
+                "WorldModel/2.1.harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
+                "WorldModel/2.2.harmonized_att_loss": harmonized_att_loss.item(),
+                "WorldModel/2.3.harmonized_rep_loss": harmonized_rep_loss.item(),
+                "WorldModel/2.4.harmonized_cap_loss": harmonized_cap_loss.item(),
+                "WorldModel/2.5.total_loss": total_loss.item(),
                 "sep_loss/1.mean_jsd": stats["mean_jsd"],
                 "sep_loss/1.std_jsd": stats["std_jsd"],
                 "sep_loss/2.pairwise_mse_mean": stats["pairwise_mse_mean"],
                 "sep_loss/2.pairwise_mse_std": stats["pairwise_mse_std"],
-                "sep_loss/3.loss_att": stats["loss_att"],
-                "sep_loss/3.loss_rep": stats["loss_rep"],
+                "sep_loss/3.att_loss": stats["att_loss"],
+                "sep_loss/3.rep_loss": stats["rep_loss"],
                 "sep_loss/4.att_pairs_ratio": stats["att_pairs_ratio"],
                 "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
             }, step=total_steps)
@@ -511,8 +515,8 @@ class WorldModel(nn.Module):
             # logger.log("sep_loss/2.pairwise_mse_std", stats["pairwise_mse_std"])
             # logger.log("sep_loss/3.sotf_att", stats["soft_att"])
             # logger.log("sep_loss/3.soft_rep", stats["sotf_rep"])
-            # logger.log("sep_loss/4.loss_att", stats["loss_att"])
-            # logger.log("sep_loss/4.loss_rep", stats["loss_rep"])
+            # logger.log("sep_loss/4.att_loss", stats["att_loss"])
+            # logger.log("sep_loss/4.rep_loss", stats["rep_loss"])
             # logger.log("sep_loss/5.att_pairs_ratio", stats["att_pairs_ratio"])
             # logger.log("sep_loss/5.rep_pairs_ratio", stats["rep_pairs_ratio"])
             # logger.log("sep_loss/6.threshold", self.sep_threshold.item())

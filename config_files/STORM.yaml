@@ -31,12 +31,13 @@ Models:
     TransformerNumHeads: 8
     LearningRate: 1e-4
     WeightDecay: 1e-3
-    CapaciityLoss:
+    CapacityLoss:
       HyperSphereRadius: 1000.0
       Coefficient: 0.3
     SeparationLoss:
       SeparationThreshold: 3.0
       SeparationLossBalance: 0.01
+      ExponentialTemperature: 2.0
       AttractionLossGate: 0.45
       RepulsionLossGate: 0.15
       RepulsionCoefficient: 1.0

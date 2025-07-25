@@ -85,6 +85,7 @@ def load_config(config_path):
     conf.Models.WorldModel.SeparationLoss = CN()
     conf.Models.WorldModel.SeparationLoss.SeparationThreshold = 0.0
     conf.Models.WorldModel.SeparationLoss.SeparationLossBalance = 0.0
+    conf.Models.WorldModel.SeparationLoss.ExponentialTemperature = 0.0
     conf.Models.WorldModel.SeparationLoss.AttractionLossGate = 0.0
     conf.Models.WorldModel.SeparationLoss.RepulsionLossGate = 0.0
     conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient = 0.0
