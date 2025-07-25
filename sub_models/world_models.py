@@ -404,7 +404,6 @@ class WorldModel(nn.Module):
             post_logits = self.dist_head.forward_post(embedding) # (B, L, stoch_dim, stoch_dim)
             sample = self.straight_throught_gradient(post_logits, sample_mode="random_sample") # (B, L, stoch_dim, stoch_dim)
             flattened_sample = self.flatten_sample(sample) # (B, L, stoch_dim*stoch_dim)
-            
 
             # decoding image
             obs_hat = self.image_decoder(flattened_sample) # (B, L, C, H, W)
