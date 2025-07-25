@@ -226,12 +226,12 @@ class WorldModel(nn.Module):
         self.imagine_batch_size = -1
         self.imagine_batch_length = -1
         # for HarmonyDream
-        self.log_sigma_obs = nn.Parameter(-torch.tensor(1.0))
-        self.log_sigma_reward = nn.Parameter(-torch.tensor(0.1))
-        self.log_sigma_dyn = nn.Parameter(-torch.tensor(0.5))
-        self.log_sigma_att = nn.Parameter(-torch.tensor(1.0)) 
-        self.log_sigma_rep = nn.Parameter(-torch.tensor(1.0))
-        self.log_sigma_cap = nn.Parameter(-torch.tensor(1.0))
+        self.log_sigma_obs = nn.Parameter(-torch.log(torch.tensor(1.0)))
+        self.log_sigma_reward = nn.Parameter(-torch.log(torch.tensor(1.0)))
+        self.log_sigma_dyn = nn.Parameter(-torch.log(torch.tensor(1.0)))
+        self.log_sigma_att = nn.Parameter(-torch.log(torch.tensor(1.0))) 
+        self.log_sigma_rep = nn.Parameter(-torch.log(torch.tensor(1.0)))
+        self.log_sigma_cap = nn.Parameter(-torch.log(torch.tensor(1.0)))
         # for separation loss
         # self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
         self.sep_threshold = torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold)
@@ -456,12 +456,12 @@ class WorldModel(nn.Module):
             sigma_cap = torch.exp(self.log_sigma_cap)
 
             # Calculate rectified Harmonious Loss
-            harmonized_obs_loss = sigma_obs * obs_loss + torch.log(1 + sigma_obs)
-            harmonized_reward_loss = sigma_reward * reward_loss_group + torch.log(1 + sigma_reward)
-            harmonized_dynamics_loss = sigma_dyn * dynamics_loss_group + torch.log(1 + sigma_dyn)
-            harmonized_att_loss = sigma_att * loss_att + torch.log(1 + sigma_att)
-            harmonized_rep_loss = sigma_rep * loss_rep + torch.log(1 + sigma_rep)
-            harmonized_cap_loss = sigma_cap * cap_loss + torch.log(1 + sigma_cap)
+            harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
+            harmonized_reward_loss = reward_loss_group / sigma_obs + torch.log(1 + sigma_reward)
+            harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
+            harmonized_att_loss = loss_att / sigma_att + torch.log(1 + sigma_att)
+            harmonized_rep_loss = loss_rep / sigma_rep + torch.log(1 + sigma_rep)
+            harmonized_cap_loss = cap_loss / sigma_cap + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
