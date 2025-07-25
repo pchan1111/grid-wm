@@ -226,12 +226,12 @@ class WorldModel(nn.Module):
         self.imagine_batch_size = -1
         self.imagine_batch_length = -1
         # for HarmonyDream
-        self.log_sigma_obs = nn.Parameter(-torch.log(torch.tensor(1.0)))
-        self.log_sigma_reward = nn.Parameter(-torch.log(torch.tensor(1.0)))
-        self.log_sigma_dyn = nn.Parameter(-torch.log(torch.tensor(1.0)))
-        self.log_sigma_att = nn.Parameter(-torch.log(torch.tensor(1.0))) 
-        self.log_sigma_rep = nn.Parameter(-torch.log(torch.tensor(1.0)))
-        self.log_sigma_cap = nn.Parameter(-torch.log(torch.tensor(1.0)))
+        self.log_sigma_obs = nn.Parameter(torch.tensor(0.0))
+        self.log_sigma_reward = nn.Parameter(torch.tensor(0.0))
+        self.log_sigma_dyn = nn.Parameter(torch.tensor(0.0))
+        self.log_sigma_att = nn.Parameter(torch.tensor(0.0))
+        self.log_sigma_rep = nn.Parameter(torch.tensor(0.0))
+        self.log_sigma_cap = nn.Parameter(torch.tensor(0.0))
         # for separation loss
         # self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
         self.sep_threshold = torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold)

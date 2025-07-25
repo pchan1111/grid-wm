@@ -50,4 +50,4 @@ Models:
     Lambda: 0.95
     EntropyCoef: 3E-4
     LearningRate: 3e-5
-    WeightDecay: 1e-2
+    WeightDecay: 1e-3
