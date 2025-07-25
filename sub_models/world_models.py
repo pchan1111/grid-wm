@@ -430,7 +430,8 @@ class WorldModel(nn.Module):
 
             # capacity loss
             cap_loss = reduce(dist_feat, "B L D -> D", "mean")
-            cap_loss = -torch.dot(cap_loss, cap_loss)
+            # cap_loss = -torch.dot(cap_loss, cap_loss)
+            cap_loss = torch.sum(cap_loss**2)
 
             # HarmonyDream >>>
             # group losses
@@ -455,12 +456,12 @@ class WorldModel(nn.Module):
             harmonized_cap_loss = cap_loss / sigma_cap + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
-            total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
+            # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
             if self.i > 20000: 
                 total_loss += self.sep_loss_balance * (harmonized_att_loss + 
                                                        self.lambda_rep * harmonized_rep_loss + 
                                                        self.lambda_cap * harmonized_cap_loss)
-            self.i += 1
+            # self.i += 1
     
         # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
 
@@ -471,7 +472,6 @@ class WorldModel(nn.Module):
         self.scaler.step(self.optimizer)
         self.scaler.update()
         self.optimizer.zero_grad(set_to_none=True)
-
 
         if self.record_run:
             wandb.log({

@@ -73,9 +73,6 @@ class StochasticTransformerKVCache(nn.Module):
 
         for layer in self.layer_stack:
             feats, attn = layer(feats, feats, feats, mask)
-
-        norm = torch.linalg.norm(feats, ord=2, dim=-1, keepdim=True)
-        feats = feats * self.root_hyper_sphere_r / norm
         
         return feats
 
