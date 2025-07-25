@@ -31,7 +31,7 @@ Models:
     TransformerNumHeads: 8
     LearningRate: 2e-4
     WeightDecay: 1e-2
-    HyperSphereRadius: 10.0
+    HyperSphereRadius: 1000.0
     SeparationLoss:
       SeparationThreshold: 3.0
       SeparationLossBalance: 0.01
