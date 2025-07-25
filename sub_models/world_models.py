@@ -430,7 +430,6 @@ class WorldModel(nn.Module):
 
             # capacity loss
             cap_loss = reduce(dist_feat, "B L D -> D", "mean")
-            # cap_loss = -torch.dot(cap_loss, cap_loss)
             cap_loss = -torch.sum(cap_loss ** 2)
 
             # HarmonyDream >>>
@@ -445,7 +444,7 @@ class WorldModel(nn.Module):
             sigma_dyn = torch.exp(self.sigma_dyn)
             sigma_att = torch.exp(self.sigma_att)
             sigma_rep = torch.exp(self.sigma_rep)
-            sigma_cap = -torch.exp(self.sigma_cap) # cap_loss is negative, so we use -sigma_cap
+            sigma_cap = torch.exp(self.sigma_cap)
 
             # Calculate rectified Harmonious Loss
             harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
@@ -453,17 +452,17 @@ class WorldModel(nn.Module):
             harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
             harmonized_att_loss = att_loss / sigma_att + torch.log(1 + sigma_att)
             harmonized_rep_loss = rep_loss / sigma_rep + torch.log(1 + sigma_rep)
-            harmonized_cap_loss = cap_loss / sigma_cap + torch.log(1 + sigma_cap)
+            harmonized_cap_loss = cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap)
             # <<< HarmonyDream
             
-            total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
-            if self.i > 20000: 
-                total_loss += self.sep_loss_balance * (harmonized_att_loss + 
-                                                       self.lambda_rep * harmonized_rep_loss + 
-                                                       self.lambda_cap * harmonized_cap_loss)
-            self.i += 1
+            # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
+            # if self.i > 20000: 
+            #     total_loss += self.sep_loss_balance * (harmonized_att_loss + 
+            #                                            self.lambda_rep * harmonized_rep_loss + 
+            #                                            self.lambda_cap * harmonized_cap_loss)
+            # self.i += 1
     
-        # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
+        total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
 
         # gradient descent
         self.scaler.scale(total_loss).backward()
