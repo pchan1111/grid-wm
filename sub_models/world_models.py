@@ -430,7 +430,7 @@ class WorldModel(nn.Module):
 
             # capacity loss
             cap_loss = reduce(dist_feat, "B L D -> D", "mean")
-            cap_loss = -torch.dot(cap_loss, cap_loss)
+            cap_loss = -torch.sum(cap_loss ** 2)
 
             # HarmonyDream >>>
             # group losses
