@@ -233,10 +233,10 @@ class WorldModel(nn.Module):
         self.log_sigma_rep = nn.Parameter(torch.tensor(0.0))
         self.log_sigma_cap = nn.Parameter(torch.tensor(0.0))
         # for separation loss
-        # self.sep_threshold = nn.Parameter(torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold))
         self.sep_threshold = torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold)
         self.record_run= record_run
-        self.att_rep_ratio = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
+        self.lambda_rep = conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient
+        self.lambda_cap = conf.Models.WorldModel.CapacityLoss.Coefficient
         self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
         self.i = 0
 
@@ -253,7 +253,7 @@ class WorldModel(nn.Module):
             num_heads=conf.Models.WorldModel.TransformerNumHeads,
             max_length=conf.Models.WorldModel.TransformerMaxLength,
             dropout=0.1,
-            hyper_sphere_r = conf.Models.WorldModel.HyperSphereRadius
+            hyper_sphere_r = conf.Models.WorldModel.CapacityLoss.HyperSphereRadius
         )
         self.dist_head = DistHead(
             image_feat_dim=self.encoder.last_channels*self.final_feature_width*self.final_feature_width,
@@ -286,16 +286,6 @@ class WorldModel(nn.Module):
         self.optimizer = torch.optim.AdamW(self.parameters(), 
                                            lr=conf.Models.WorldModel.LearningRate, 
                                            weight_decay=conf.Models.WorldModel.WeightDecay)
-        # self.optimizer = torch.optim.Adam(self.parameters(), lr=conf.Models.WorldModel.LearningRate)
-        # self.model_params = []
-        # self.sep_threshold_params = []
-        # for name, param in self.named_parameters():
-        #     if "sep_threshold" in name:
-        #         self.sep_threshold_params.append(param)
-        #     else:
-        #         param.requires_grad = True
-        # self.optimizer_model = torch.optim.AdamW(self.model_params, lr=1e-4)
-        # self.optimizer_sep_threshold = torch.optim.AdamW(self.sep_threshold, lr=1e-4)
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     def encode_obs(self, obs):
@@ -467,7 +457,9 @@ class WorldModel(nn.Module):
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
             if self.i > 20000: 
-                total_loss += self.sep_loss_balance * (harmonized_att_loss + self.att_rep_ratio * harmonized_rep_loss + harmonized_cap_loss)
+                total_loss += self.sep_loss_balance * (harmonized_att_loss + 
+                                                       self.lambda_rep * harmonized_rep_loss + 
+                                                       self.lambda_cap * harmonized_cap_loss)
             self.i += 1
     
         # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
@@ -475,11 +467,6 @@ class WorldModel(nn.Module):
         # gradient descent
         self.scaler.scale(total_loss).backward()
         self.scaler.unscale_(self.optimizer)  # for clip grad
-        # Check threshold
-        if self.sep_threshold.grad is not None:
-            stats["sep_threshold_grad"] = self.sep_threshold.grad.item()
-        else:
-            stats["sep_threshold_grad"] = 0
         torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1000.0)
         self.scaler.step(self.optimizer)
         self.scaler.update()
@@ -487,32 +474,26 @@ class WorldModel(nn.Module):
 
         if self.record_run:
             wandb.log({
-                "WorldModel/reconstruction_loss": reconstruction_loss.item(),
-                "WorldModel/reward_loss": reward_loss.item(),
-                "WorldModel/termination_loss": termination_loss.item(),
-                "WorldModel/dynamics_loss": dynamics_loss.item(),
-                "WorldModel/representation_loss": representation_loss.item(),
-                "WorldModel/harmonized_obs_loss": harmonized_obs_loss.item(),
-                "WorldModel/harmonized_reward_loss": harmonized_reward_loss.item(),
-                "WorldModel/harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
-                "WorldModel/harmonized_att_loss": harmonized_att_loss.item(),
-                "WorldModel/harmonized_rep_loss": harmonized_rep_loss.item(),
-                "WorldModel/harmonized_cap_loss": harmonized_cap_loss.item(),
-                "WorldModel/total_loss": total_loss.item(),
+                "WorldModel/1.reconstruction_loss": reconstruction_loss.item(),
+                "WorldModel/2.reward_loss": reward_loss.item(),
+                "WorldModel/3.termination_loss": termination_loss.item(),
+                "WorldModel/4.dynamics_loss": dynamics_loss.item(),
+                "WorldModel/5.representation_loss": representation_loss.item(),
+                "WorldModel/6.harmonized_obs_loss": harmonized_obs_loss.item(),
+                "WorldModel/7.harmonized_reward_loss": harmonized_reward_loss.item(),
+                "WorldModel/8.harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
+                "WorldModel/9.harmonized_att_loss": harmonized_att_loss.item(),
+                "WorldModel/10.harmonized_rep_loss": harmonized_rep_loss.item(),
+                "WorldModel/11.harmonized_cap_loss": harmonized_cap_loss.item(),
+                "WorldModel/12.total_loss": total_loss.item(),
                 "sep_loss/1.mean_jsd": stats["mean_jsd"],
                 "sep_loss/1.std_jsd": stats["std_jsd"],
                 "sep_loss/2.pairwise_mse_mean": stats["pairwise_mse_mean"],
                 "sep_loss/2.pairwise_mse_std": stats["pairwise_mse_std"],
-                "sep_loss/3.sotf_att_mean": stats["soft_att_mean"],
-                "sep_loss/3.sotf_att_std": stats["soft_att_std"],
-                "sep_loss/3.soft_rep_mean": stats["soft_rep_mean"],
-                "sep_loss/3.sotf_rep_std": stats["soft_rep_std"],
-                "sep_loss/4.loss_att": stats["loss_att"],
-                "sep_loss/4.loss_rep": stats["loss_rep"],
-                "sep_loss/5.att_pairs_ratio": stats["att_pairs_ratio"],
+                "sep_loss/3.loss_att": stats["loss_att"],
+                "sep_loss/3.loss_rep": stats["loss_rep"],
+                "sep_loss/4.att_pairs_ratio": stats["att_pairs_ratio"],
                 "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
-                "sep_loss/6.threshold": self.sep_threshold.item(),
-                "sep_loss/6.sep_threshold_grad": stats["sep_threshold_grad"]
             }, step=total_steps)
         
         # if logger is not None:

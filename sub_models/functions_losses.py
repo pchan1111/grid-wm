@@ -67,9 +67,7 @@ class SeparationLoss(nn.Module):
     def __init__(self, sep_threshold, conf):
         super().__init__()
         self.sep_threshold = sep_threshold
-        self.temperature = conf.Models.WorldModel.SeparationLoss.SigmoidTemperature
         self.scaling_factor = conf.Models.WorldModel.SeparationLoss.ScalingFactor
-        self.dist_temperature = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
         self.att_loss_gate = conf.Models.WorldModel.SeparationLoss.AttractionLossGate
         self.rep_loss_gate = conf.Models.WorldModel.SeparationLoss.RepulsionLossGate
 
@@ -85,8 +83,6 @@ class SeparationLoss(nn.Module):
         m = 0.5 * (dist_p1.probs + dist_p2.probs) # (B, L, L, K, C)
         dist_m = Categorical(probs=m.contiguous())
 
-        # kl_p_m = (p1 * (torch.log(p1 + eps) - torch.log(m + eps))).sum(dim=-1) # (B, L, L, K)
-        # kl_q_m = (p2 * (torch.log(p2 + eps) - torch.log(m + eps))).sum(dim=-1) 
         kl_p_m = torch.distributions.kl.kl_divergence(dist_p1, dist_m) # (B, L, L, K)
         kl_q_m = torch.distributions.kl.kl_divergence(dist_p2, dist_m)
 
@@ -97,14 +93,10 @@ class SeparationLoss(nn.Module):
         triu_mask = torch.triu(torch.ones(L, L, device=prior.device), diagonal=1)
 
         # Attraction mask
-        soft_att = torch.sigmoid((self.sep_threshold - jsd_matrix) / self.temperature)
-        hard_att = (jsd_matrix < self.sep_threshold).float()
-        att_mask = (hard_att + soft_att - soft_att.detach()) * triu_mask
+        att_mask = (jsd_matrix < self.sep_threshold).float() * triu_mask
 
         # Repulsion mask
-        soft_rep = torch.sigmoid((jsd_matrix - self.sep_threshold) / self.temperature)
-        hard_rep = (jsd_matrix >= self.sep_threshold).float()
-        rep_mask = (hard_rep + soft_rep - soft_rep.detach()) * triu_mask
+        rep_mask = (jsd_matrix >= self.sep_threshold).float() * triu_mask
 
         # --- 3. Define loss function ---
         h1 = h.unsqueeze(2) # (B, L, 1, D_h)
@@ -128,18 +120,11 @@ class SeparationLoss(nn.Module):
         stats["rep_pairs_ratio"] = (rep_mask.sum() / (triu_mask.sum() * B)).item()
         stats["loss_att"] = loss_att.item()
         stats["loss_rep"] = loss_rep.item()
-        stats["soft_att_mean"] = soft_att.mean().item()
-        stats["soft_att_std"] = soft_att.std().item()
-        stats["soft_rep_mean"] = soft_rep.mean().item()
-        stats["soft_rep_std"] = soft_rep.std().item()
         
         valid_jsd_values = jsd_matrix[triu_mask.unsqueeze(0).expand(B, L, L).bool()]
         stats["mean_jsd"] = valid_jsd_values.mean().item()
         stats["std_jsd"] = valid_jsd_values.std().item()
-        # print("loss_att:", stats["loss_att"], "loss_rep:", stats["loss_rep"])
-        # print("mean_jsd:", stats["mean_jsd"], "std_jsd:", stats["std_jsd"])
-        # print("sep_threshold:", self.sep_threshold)
-        
+
         return  loss_att, loss_rep, stats
     
 if __name__ == "__main__":
