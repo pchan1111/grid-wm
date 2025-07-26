@@ -36,7 +36,7 @@ Models:
       Coefficient: 0.3
     SeparationLoss:
       SeparationThreshold: 3.0
-      SeparationLossBalance: 0.01
+      SeparationLossBalance: 0.1
       ExponentialTemperature: 2.0
       AttractionLossGate: 0.45
       RepulsionLossGate: 0.15
