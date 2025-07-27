@@ -34,9 +34,10 @@ Models:
     CapacityLoss:
       HyperSphereRadius: 1000.0
       Coefficient: 0.3
+      Gate: -550.0
     SeparationLoss:
       SeparationThreshold: 3.0
-      SeparationLossBalance: 1.0
+      SeparationLossBalance: 0.1
       ExponentialTemperature: 2.0
       AttractionLossGate: 0.45
       RepulsionLossGate: 0.15

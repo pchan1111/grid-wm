@@ -238,6 +238,7 @@ class WorldModel(nn.Module):
         self.lambda_rep = conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient
         self.lambda_cap = conf.Models.WorldModel.CapacityLoss.Coefficient
         self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
+        self.cap_loss_gate = conf.Models.WorldModel.CapacityLoss.Gate
         self.i = 0
 
         self.encoder = EncoderBN(
@@ -432,6 +433,9 @@ class WorldModel(nn.Module):
             cap_loss = reduce(dist_feat, "B L D -> D", "mean")
             cap_loss = -torch.sum(cap_loss ** 2)
 
+            cap_loss_gated = cap_loss < self.cap_loss_gate
+            torch.where(cap_loss_gated, 0.0, cap_loss)
+
             # HarmonyDream >>>
             # group losses
             obs_loss = reconstruction_loss
@@ -444,7 +448,7 @@ class WorldModel(nn.Module):
             sigma_dyn = torch.exp(self.sigma_dyn)
             sigma_att = torch.where(stats['att_loss_gated'], torch.exp(self.sigma_att).detach(), torch.exp(self.sigma_att))
             sigma_rep = torch.exp(self.sigma_rep)
-            sigma_cap = torch.exp(self.sigma_cap)
+            sigma_cap = torch.where(cap_loss_gated, torch.exp(self.sigma_cap).detach(), torch.exp(self.sigma_cap))
 
             # Calculate rectified Harmonious Loss
             harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
