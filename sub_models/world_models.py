@@ -442,9 +442,9 @@ class WorldModel(nn.Module):
             sigma_obs = torch.exp(self.sigma_obs)
             sigma_reward = torch.exp(self.sigma_reward)
             sigma_dyn = torch.exp(self.sigma_dyn)
-            sigma_att = torch.exp(self.sigma_att)
+            sigma_att = torch.where(stats['att_loss_gated'], torch.exp(self.sigma_att).detach, torch.exp(self.sigma_att))
             sigma_rep = torch.exp(self.sigma_rep)
-            sigma_cap = torch.exp(self.sigma_cap) 
+            sigma_cap = torch.exp(self.sigma_cap)
 
             # Calculate rectified Harmonious Loss
             harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
