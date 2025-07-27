@@ -442,7 +442,7 @@ class WorldModel(nn.Module):
             sigma_obs = torch.exp(self.sigma_obs)
             sigma_reward = torch.exp(self.sigma_reward)
             sigma_dyn = torch.exp(self.sigma_dyn)
-            sigma_att = torch.where(stats['att_loss_gated'], torch.exp(self.sigma_att).detach, torch.exp(self.sigma_att))
+            sigma_att = torch.where(stats['att_loss_gated'], torch.exp(self.sigma_att).detach(), torch.exp(self.sigma_att))
             sigma_rep = torch.exp(self.sigma_rep)
             sigma_cap = torch.exp(self.sigma_cap)
 
