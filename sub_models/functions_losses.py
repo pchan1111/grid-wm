@@ -15,13 +15,6 @@ def symlog(x):
 def symexp(x):
     return torch.sign(x) * (torch.exp(torch.abs(x)) - 1)
 
-# class HardComparisonSTE(torch.autograd.Function):
-def print_gpu_memory_usage(message=""):
-    """GPUのメモリ使用状況をMB単位で表示するヘルパー関数"""
-    allocated = torch.cuda.memory_allocated() / 1024**2
-    max_allocated = torch.cuda.max_memory_allocated() / 1024**2
-    print(f"{message} | 使用中: {allocated:.2f} MB | 最大使用量: {max_allocated:.2f} MB")
-
 class SymLogLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -108,7 +101,6 @@ class SeparationLoss(nn.Module):
         # Attraction loss
         att_loss = (pairwise_mse * att_mask).sum() / (att_mask.sum() + eps)
         is_gated = att_loss < self.att_loss_gate
-        att_loss = torch.where(is_gated, 0.0, att_loss)
         self.stats["att_loss_gated"] = is_gated
 
         # Repulsion loss

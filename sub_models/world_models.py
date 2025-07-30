@@ -434,7 +434,6 @@ class WorldModel(nn.Module):
             cap_loss = -torch.sum(cap_loss ** 2)
 
             cap_loss_gated = cap_loss < self.cap_loss_gate
-            torch.where(cap_loss_gated, 0.0, cap_loss)
 
             # HarmonyDream >>>
             # group losses
@@ -446,17 +445,18 @@ class WorldModel(nn.Module):
             sigma_obs = torch.exp(self.sigma_obs)
             sigma_reward = torch.exp(self.sigma_reward)
             sigma_dyn = torch.exp(self.sigma_dyn)
-            sigma_att = torch.where(stats['att_loss_gated'], torch.exp(self.sigma_att).detach(), torch.exp(self.sigma_att))
+            sigma_att = torch.exp(self.sigma_att)
             sigma_rep = torch.exp(self.sigma_rep)
-            sigma_cap = torch.where(cap_loss_gated, torch.exp(self.sigma_cap).detach(), torch.exp(self.sigma_cap))
+            sigma_cap = torch.exp(self.sigma_cap)
 
             # Calculate rectified Harmonious Loss
             harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
             harmonized_reward_loss = reward_loss_group / sigma_reward + torch.log(1 + sigma_reward)
             harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
-            harmonized_att_loss = att_loss / sigma_att + torch.log(1 + sigma_att)
+            harmonized_att_loss = torch.where(stats['att_loss_gated'], 0.0, att_loss / sigma_att + torch.log(1 + sigma_att))
             harmonized_rep_loss = rep_loss / sigma_rep + torch.log(1 + sigma_rep)
-            harmonized_cap_loss = cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap)
+            harmonized_cap_loss = torch.where(cap_loss_gated, 0.0, 
+                                    cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap))
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
