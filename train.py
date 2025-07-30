@@ -256,6 +256,8 @@ if __name__ == "__main__":
         # build world model and agent
         world_model = build_world_model(action_dim, args.record_run, conf)
         agent = build_agent(action_dim, args.record_run, conf)
+        world_model = torch.compile(world_model, mode="max-autotune")
+        agent = torch.compile(agent, mode="max-autotune")
 
         # build replay buffer
         replay_buffer = ReplayBuffer(
