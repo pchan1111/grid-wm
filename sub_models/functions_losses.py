@@ -66,7 +66,9 @@ class SeparationLoss(nn.Module):
         self.rep_loss_gate = conf.Models.WorldModel.SeparationLoss.RepulsionLossGate
         self.stats = {}
 
-    def forward(self, prior, h):
+    def forward(self, prior, h, **kwargs):
+        reward = kwargs.get('reward')
+        termination = kwargs.get('termination')
         B, L, K, C = prior.shape
         eps = 1e-10
 
