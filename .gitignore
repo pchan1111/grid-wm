@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+wandb/
+*.pth
+config.yaml
+*.csv
+*.tfevents*
