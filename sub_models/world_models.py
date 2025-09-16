@@ -225,20 +225,24 @@ class WorldModel(nn.Module):
         self.tensor_dtype = torch.float16 if self.use_amp else torch.float32
         self.imagine_batch_size = -1
         self.imagine_batch_length = -1
-        # for HarmonyDream
+        self.record_run= record_run
+
+        # HarmonyDream
         self.sigma_obs = nn.Parameter(torch.tensor(0.0))
         self.sigma_reward = nn.Parameter(torch.tensor(0.0))
         self.sigma_dyn = nn.Parameter(torch.tensor(0.0))
         self.sigma_att = nn.Parameter(torch.tensor(0.0))
         self.sigma_rep = nn.Parameter(torch.tensor(0.0))
         self.sigma_cap = nn.Parameter(torch.tensor(4.5))
-        # for separation loss
-        self.sep_threshold = torch.tensor(conf.Models.WorldModel.SeparationLoss.SeparationThreshold)
-        self.record_run= record_run
+
+        # Separation loss
         self.lambda_rep = conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient
         self.lambda_cap = conf.Models.WorldModel.CapacityLoss.Coefficient
         self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
         self.i = 0
+
+        # Capacity loss
+        self.cap_loss_gate = conf.Models.WorldModel.CapacityLoss.Gate
 
         self.encoder = EncoderBN(
             in_channels=conf.Models.WorldModel.InChannels,
@@ -253,7 +257,7 @@ class WorldModel(nn.Module):
             num_heads=conf.Models.WorldModel.TransformerNumHeads,
             max_length=conf.Models.WorldModel.TransformerMaxLength,
             dropout=0.1,
-            hyper_sphere_r = conf.Models.WorldModel.CapacityLoss.HyperSphereRadius
+            conf=conf
         )
         self.dist_head = DistHead(
             image_feat_dim=self.encoder.last_channels*self.final_feature_width*self.final_feature_width,
@@ -282,7 +286,7 @@ class WorldModel(nn.Module):
         self.bce_with_logits_loss_func = nn.BCEWithLogitsLoss()
         self.symlog_twohot_loss_func = SymLogTwoHotLoss(num_classes=255, lower_bound=-20, upper_bound=20)
         self.categorical_kl_div_loss = CategoricalKLDivLossWithFreeBits(free_bits=1)
-        self.separation_loss_func = SeparationLoss(sep_threshold=self.sep_threshold, conf=conf)
+        self.separation_loss_func = SeparationLoss(conf=conf)
         self.optimizer = torch.optim.AdamW(self.parameters(), 
                                            lr=conf.Models.WorldModel.LearningRate, 
                                            weight_decay=conf.Models.WorldModel.WeightDecay)
@@ -404,7 +408,6 @@ class WorldModel(nn.Module):
             post_logits = self.dist_head.forward_post(embedding) # (B, L, stoch_dim, stoch_dim)
             sample = self.straight_throught_gradient(post_logits, sample_mode="random_sample") # (B, L, stoch_dim, stoch_dim)
             flattened_sample = self.flatten_sample(sample) # (B, L, stoch_dim*stoch_dim)
-            
 
             # decoding image
             obs_hat = self.image_decoder(flattened_sample) # (B, L, C, H, W)
@@ -413,6 +416,7 @@ class WorldModel(nn.Module):
             temporal_mask = get_subsequent_mask_with_batch_length(batch_length, flattened_sample.device) # (1, L, L)
             dist_feat = self.storm_transformer(flattened_sample, action, temporal_mask) # (B, L, h)
             prior_logits = self.dist_head.forward_prior(dist_feat)
+            
             # decoding reward and termination with dist_feat
             reward_hat = self.reward_decoder(dist_feat)
             termination_hat = self.termination_decoder(dist_feat)
@@ -421,6 +425,7 @@ class WorldModel(nn.Module):
             reconstruction_loss = self.mse_loss_func(obs_hat, obs)
             reward_loss = self.symlog_twohot_loss_func(reward_hat, reward)
             termination_loss = self.bce_with_logits_loss_func(termination_hat, termination)
+
             # dyn-rep loss
             dynamics_loss, dynamics_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:].detach(), prior_logits[:, :-1])
             representation_loss, representation_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:], prior_logits[:, :-1].detach())
@@ -431,6 +436,7 @@ class WorldModel(nn.Module):
             # capacity loss
             cap_loss = reduce(dist_feat, "B L D -> D", "mean")
             cap_loss = -torch.sum(cap_loss ** 2)
+            cap_loss_gated = cap_loss < self.cap_loss_gate
 
             # HarmonyDream >>>
             # group losses
@@ -442,7 +448,7 @@ class WorldModel(nn.Module):
             sigma_obs = torch.exp(self.sigma_obs)
             sigma_reward = torch.exp(self.sigma_reward)
             sigma_dyn = torch.exp(self.sigma_dyn)
-            sigma_att = torch.where(stats['att_loss_gated'], torch.exp(self.sigma_att).detach, torch.exp(self.sigma_att))
+            sigma_att = torch.exp(self.sigma_att)
             sigma_rep = torch.exp(self.sigma_rep)
             sigma_cap = torch.exp(self.sigma_cap)
 
@@ -450,9 +456,10 @@ class WorldModel(nn.Module):
             harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
             harmonized_reward_loss = reward_loss_group / sigma_reward + torch.log(1 + sigma_reward)
             harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
-            harmonized_att_loss = att_loss / sigma_att + torch.log(1 + sigma_att)
-            harmonized_rep_loss = rep_loss / sigma_rep + torch.log(1 + sigma_rep)
-            harmonized_cap_loss = cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap)
+            harmonized_att_loss = torch.where(stats['att_loss_gated'], 0.0, att_loss / sigma_att + torch.log(1 + sigma_att))
+            harmonized_rep_loss = torch.where(stats['rep_loss_gated'], 0.0, rep_loss / sigma_rep + torch.log(1 + sigma_rep))
+            harmonized_cap_loss = torch.where(cap_loss_gated, 0.0, 
+                                              cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap))
             # <<< HarmonyDream
             
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
@@ -489,14 +496,14 @@ class WorldModel(nn.Module):
                 "WorldModel/2.3.harmonized_rep_loss": harmonized_rep_loss.item(),
                 "WorldModel/2.4.harmonized_cap_loss": harmonized_cap_loss.item(),
                 "WorldModel/2.5.total_loss": total_loss.item(),
-                "sep_loss/1.mean_jsd": stats["mean_jsd"],
-                "sep_loss/1.std_jsd": stats["std_jsd"],
-                "sep_loss/2.pairwise_mse_mean": stats["pairwise_mse_mean"],
-                "sep_loss/2.pairwise_mse_std": stats["pairwise_mse_std"],
-                "sep_loss/3.att_loss": stats["att_loss"],
-                "sep_loss/3.rep_loss": stats["rep_loss"],
-                "sep_loss/4.att_pairs_ratio": stats["att_pairs_ratio"],
-                "sep_loss/5.rep_pairs_ratio": stats["rep_pairs_ratio"],
+                "sep_loss/1.0.mean_jsd": stats["mean_jsd"],
+                "sep_loss/1.1.std_jsd": stats["std_jsd"],
+                "sep_loss/2.0.pairwise_mse_mean": stats["pairwise_mse_mean"],
+                "sep_loss/2.1.pairwise_mse_std": stats["pairwise_mse_std"],
+                "sep_loss/3.0.att_loss": stats["att_loss"],
+                "sep_loss/3.1.rep_loss": stats["rep_loss"],
+                "sep_loss/4.0.att_pairs_ratio": stats["att_pairs_ratio"],
+                "sep_loss/5.0.rep_pairs_ratio": stats["rep_pairs_ratio"],
             }, step=total_steps)
         
         # if logger is not None:

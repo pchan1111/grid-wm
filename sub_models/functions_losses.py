@@ -15,13 +15,6 @@ def symlog(x):
 def symexp(x):
     return torch.sign(x) * (torch.exp(torch.abs(x)) - 1)
 
-# class HardComparisonSTE(torch.autograd.Function):
-def print_gpu_memory_usage(message=""):
-    """GPUのメモリ使用状況をMB単位で表示するヘルパー関数"""
-    allocated = torch.cuda.memory_allocated() / 1024**2
-    max_allocated = torch.cuda.max_memory_allocated() / 1024**2
-    print(f"{message} | 使用中: {allocated:.2f} MB | 最大使用量: {max_allocated:.2f} MB")
-
 class SymLogLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -64,9 +57,9 @@ class SymLogTwoHotLoss(nn.Module):
         return symexp(F.softmax(output, dim=-1) @ self.bins)
 
 class SeparationLoss(nn.Module):
-    def __init__(self, sep_threshold, conf):
+    def __init__(self, conf):
         super().__init__()
-        self.sep_threshold = sep_threshold
+        self.sep_threshold = conf.Models.WorldModel.SeparationLoss.SeparationThreshold
         self.scaling_factor = conf.Models.WorldModel.SeparationLoss.ScalingFactor
         self.exp_tmp = conf.Models.WorldModel.SeparationLoss.ExponentialTemperature
         self.att_loss_gate = conf.Models.WorldModel.SeparationLoss.AttractionLossGate
@@ -91,7 +84,7 @@ class SeparationLoss(nn.Module):
         jsd_matrix= 0.5 * (kl_p_m + kl_q_m)
         jsd_matrix = jsd_matrix.mean(dim=-1) * self.scaling_factor # (B, L, L)
 
-        # --- 2. Calculate two masks ---
+        # --- 2. Calculate masks ---
         triu_mask = torch.triu(torch.ones(L, L, device=prior.device), diagonal=1)
 
         # Attraction mask
@@ -114,7 +107,9 @@ class SeparationLoss(nn.Module):
         # Repulsion loss
         repulsion_enery = torch.exp(-pairwise_mse / self.exp_tmp)
         rep_loss = (repulsion_enery * rep_mask).sum() / (rep_mask.sum() + eps)
-        rep_loss = torch.where(rep_loss > self.rep_loss_gate, rep_loss, 0.0)
+        is_gated = rep_loss < self.rep_loss_gate
+        rep_loss = torch.where(is_gated, 0.0, rep_loss)
+        self.stats["rep_loss_gated"] = is_gated
 
         # --- 5. Statistics for debugging ---
         self.stats["pairwise_mse_mean"] = pairwise_mse.mean().item()

@@ -82,6 +82,7 @@ def load_config(config_path):
     conf.Models.WorldModel.CapacityLoss = CN()
     conf.Models.WorldModel.CapacityLoss.HyperSphereRadius = 0.0
     conf.Models.WorldModel.CapacityLoss.Coefficient = 0.3
+    conf.Models.WorldModel.CapacityLoss.Gate = 0.0
     conf.Models.WorldModel.SeparationLoss = CN()
     conf.Models.WorldModel.SeparationLoss.SeparationThreshold = 0.0
     conf.Models.WorldModel.SeparationLoss.SeparationLossBalance = 0.0
