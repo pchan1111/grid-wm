@@ -34,7 +34,7 @@ Models:
     CapacityLoss:
       HyperSphereRadius: 1000.0
       Coefficient: 0.3
-      Gate: 300.0
+      Gate: -200.0
     SeparationLoss:
       SeparationThreshold: 3.0
       SeparationLossBalance: 0.1
