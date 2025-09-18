@@ -233,7 +233,7 @@ class WorldModel(nn.Module):
         self.sigma_dyn = nn.Parameter(torch.tensor(0.0))
         self.sigma_att = nn.Parameter(torch.tensor(0.0))
         self.sigma_rep = nn.Parameter(torch.tensor(0.0))
-        self.sigma_cap = nn.Parameter(torch.tensor(4.5))
+        self.sigma_cap = nn.Parameter(torch.tensor(0.0))
 
         # Separation loss
         self.lambda_rep = conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient
