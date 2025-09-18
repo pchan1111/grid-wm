@@ -33,7 +33,7 @@ Models:
     WeightDecay: 1e-3
     CapacityLoss:
       HyperSphereRadius: 1000.0
-      Coefficient: 0.3
+      Coefficient: 0.1
       Gate: -120.0
     SeparationLoss:
       SeparationThreshold: 3.0
