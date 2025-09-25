@@ -90,6 +90,7 @@ def load_config(config_path):
     conf.Models.WorldModel.SeparationLoss.AttractionLossGate = 0.0
     conf.Models.WorldModel.SeparationLoss.RepulsionLossGate = 0.0
     conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient = 0.0
+    conf.Models.WorldModel.SeparationLoss.ConformalIsometryCoefficient = 0.0
     conf.Models.WorldModel.SeparationLoss.ScalingFactor = 32.0
 
     conf.Models.Agent = CN()

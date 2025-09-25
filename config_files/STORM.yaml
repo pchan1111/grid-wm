@@ -42,6 +42,7 @@ Models:
       AttractionLossGate: 0.0
       RepulsionLossGate: 0.0
       RepulsionCoefficient: 1.5
+      ConformalIsometryCoefficient: 1.0
       ScalingFactor: 32.0
 
 
