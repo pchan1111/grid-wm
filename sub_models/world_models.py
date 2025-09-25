@@ -465,7 +465,7 @@ class WorldModel(nn.Module):
             total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
             if self.i > 20000: 
                 total_loss += self.sep_loss_balance * (harmonized_att_loss + 
-                                                       self.lambda_rep * harmonized_rep_loss + 
+                                                       self.lambda_rep * harmonized_rep_loss +
                                                        self.lambda_cap * harmonized_cap_loss)
             self.i += 1
     

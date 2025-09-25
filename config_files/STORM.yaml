@@ -33,15 +33,15 @@ Models:
     WeightDecay: 1e-3
     CapacityLoss:
       HyperSphereRadius: 1000.0
-      Coefficient: 0.1
-      Gate: -120.0
+      Coefficient: 0.04
+      Gate: -1000.0
     SeparationLoss:
-      SeparationThreshold: 3.0
+      SeparationThreshold: 1.0
       SeparationLossBalance: 0.1
       ExponentialTemperature: 2.0
-      AttractionLossGate: 0.45
-      RepulsionLossGate: 0.15
-      RepulsionCoefficient: 1.2
+      AttractionLossGate: 0.0
+      RepulsionLossGate: 0.0
+      RepulsionCoefficient: 1.5
       ScalingFactor: 32.0
 
 
