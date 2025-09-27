@@ -474,7 +474,11 @@ class WorldModel(nn.Module):
                                                        self.lambda_conIso * harmonized_conIso_loss)
             self.i += 1
     
-        # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
+            # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
+            # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss + \
+                        #  att_loss + rep_loss + cap_loss + conIso_loss
+
+            
 
         # gradient descent
         self.scaler.scale(total_loss).backward()
