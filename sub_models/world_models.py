@@ -120,11 +120,13 @@ class DistHead(nn.Module):
     '''
     Dist: abbreviation of distribution
     '''
-    def __init__(self, image_feat_dim, transformer_hidden_dim, stoch_dim) -> None:
+    def __init__(self, image_feat_dim, transformer_hidden_dim, stoch_dim, velocity_dim) -> None:
         super().__init__()
         self.stoch_dim = stoch_dim
         self.post_head = nn.Linear(image_feat_dim, stoch_dim*stoch_dim)
-        self.prior_head = nn.Linear(transformer_hidden_dim, stoch_dim*stoch_dim)
+        self.velocity_main = nn.Linear(transformer_hidden_dim, transformer_hidden_dim)
+        self.fc_mu = nn.Linear(transformer_hidden_dim, velocity_dim)
+        self.fc_log_var = nn.Linear(transformer_hidden_dim, velocity_dim)
 
     def unimix(self, logits, mixing_ratio=0.01):
         # uniform noise mixing
@@ -132,6 +134,12 @@ class DistHead(nn.Module):
         mixed_probs = mixing_ratio * torch.ones_like(probs) / self.stoch_dim + (1-mixing_ratio) * probs
         logits = torch.log(mixed_probs)
         return logits
+    
+    def reparameterize(self, mu, log_std):
+        std = torch.exp(log_std)
+        eps = torch.randn_like(std)
+        
+        return mu + eps * std
 
     def forward_post(self, x):
         logits = self.post_head(x)
@@ -139,11 +147,13 @@ class DistHead(nn.Module):
         logits = self.unimix(logits)
         return logits
 
-    def forward_prior(self, x):
-        logits = self.prior_head(x)
-        logits = rearrange(logits, "B L (K C) -> B L K C", K=self.stoch_dim)
-        logits = self.unimix(logits)
-        return logits
+    def forward_velocity(self, x):
+        h = self.velocity_main(x)
+        mu = self.fc_mu(h)
+        log_std = self.fc_log_var(h)
+        velocity = self.reparameterize(mu, log_std)
+        
+        return velocity
 
 
 class RewardDecoder(nn.Module):
@@ -262,7 +272,8 @@ class WorldModel(nn.Module):
         self.dist_head = DistHead(
             image_feat_dim=self.encoder.last_channels*self.final_feature_width*self.final_feature_width,
             transformer_hidden_dim=self.transformer_hidden_dim,
-            stoch_dim=self.stoch_dim
+            stoch_dim=self.stoch_dim,
+            velocity_dim=conf.Models.WorldModel.VelocityDim
         )
         self.image_decoder = DecoderBN(
             stoch_dim=self.stoch_flattened_dim,
@@ -415,7 +426,10 @@ class WorldModel(nn.Module):
             # transformer
             temporal_mask = get_subsequent_mask_with_batch_length(batch_length, flattened_sample.device) # (1, L, L)
             dist_feat = self.storm_transformer(flattened_sample, action, temporal_mask) # (B, L, h)
-            prior_logits = self.dist_head.forward_prior(dist_feat)
+            
+            # velocity
+            velocity = self.dist_head.forward_velocity(dist_feat)
+            # prior_logits = self.dist_head.forward_prior(dist_feat)
             
             # decoding reward and termination with dist_feat
             reward_hat = self.reward_decoder(dist_feat)
