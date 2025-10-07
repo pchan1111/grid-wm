@@ -6,4 +6,4 @@ python -u train.py \
     -config_path "config_files/STORM.yaml" \
     -env_name "ALE/${env_name}-v5" \
     -trajectory_path "D_TRAJ/${env_name}.pkl" \
-    -record_run 
+    # -record_run 
