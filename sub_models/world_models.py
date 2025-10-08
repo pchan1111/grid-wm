@@ -122,8 +122,18 @@ class DistHead(nn.Module):
     '''
     def __init__(self, image_feat_dim, transformer_hidden_dim, stoch_dim, velocity_dim) -> None:
         super().__init__()
+        hidden_dim = stoch_dim * stoch_dim
         self.stoch_dim = stoch_dim
         self.post_head = nn.Linear(image_feat_dim, stoch_dim*stoch_dim)
+        self.prior_head = nn.Sequential(
+            nn.Linear(stoch_dim*stoch_dim+velocity_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, stoch_dim*stoch_dim)
+        )
         self.velocity_main = nn.Linear(transformer_hidden_dim, transformer_hidden_dim)
         self.fc_mu = nn.Linear(transformer_hidden_dim, velocity_dim)
         self.fc_log_var = nn.Linear(transformer_hidden_dim, velocity_dim)
@@ -147,6 +157,14 @@ class DistHead(nn.Module):
         logits = self.unimix(logits)
         return logits
 
+    def forward_prior(self, z_t, velocity):
+        x = torch.cat([z_t, velocity], dim=-1)
+        logits = self.prior_head(x)
+        logits = rearrange(logits, "B L (K C) -> B L K C", K=self.stoch_dim)
+        logits = self.unimix(logits)
+        return logits
+
+
     def forward_velocity(self, x):
         h = self.velocity_main(x)
         mu = self.fc_mu(h)
@@ -154,6 +172,7 @@ class DistHead(nn.Module):
         velocity = self.reparameterize(mu, log_std)
         
         return velocity
+
 
 
 class RewardDecoder(nn.Module):
@@ -319,7 +338,8 @@ class WorldModel(nn.Module):
             temporal_mask = get_subsequent_mask(latent)
             dist_feat = self.storm_transformer(latent, action, temporal_mask)
             last_dist_feat = dist_feat[:, -1:]
-            prior_logits = self.dist_head.forward_prior(last_dist_feat)
+            velocity = self.dist_head.forward_velocity(last_dist_feat)
+            prior_logits = self.dist_head.forward_prior(latent[:, -1:], velocity)
             prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
             prior_flattened_sample = self.flatten_sample(prior_sample)
         return prior_flattened_sample, last_dist_feat
@@ -327,7 +347,8 @@ class WorldModel(nn.Module):
     def predict_next(self, last_flattened_sample, action, log_video=True):
         with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             dist_feat = self.storm_transformer.forward_with_kv_cache(last_flattened_sample, action)
-            prior_logits = self.dist_head.forward_prior(dist_feat)
+            velocity = self.dist_head.forward_velocity(dist_feat)
+            prior_logits = self.dist_head.forward_prior(velocity, last_flattened_sample)
 
             # decoding
             prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
@@ -431,7 +452,7 @@ class WorldModel(nn.Module):
             
             # velocity
             velocity = self.dist_head.forward_velocity(dist_feat)
-            # prior_logits = self.dist_head.forward_prior(dist_feat)
+            prior_logits = self.dist_head.forward_prior(flattened_sample, velocity)
             
             # decoding reward and termination with dist_feat
             reward_hat = self.reward_decoder(dist_feat)
@@ -480,15 +501,15 @@ class WorldModel(nn.Module):
             harmonized_conIso_loss = conIso_loss / sigma_conIso + torch.log(1 + sigma_conIso)
             # <<< HarmonyDream
             
-            total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
-            if self.i > 20000: 
-                total_loss += self.sep_loss_balance * (harmonized_att_loss + 
-                                                       self.lambda_rep * harmonized_rep_loss +
-                                                       self.lambda_cap * harmonized_cap_loss +
-                                                       self.lambda_conIso * harmonized_conIso_loss)
-            self.i += 1
+            # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
+            # if self.i > 20000: 
+            #     total_loss += self.sep_loss_balance * (harmonized_att_loss + 
+            #                                            self.lambda_rep * harmonized_rep_loss +
+            #                                            self.lambda_cap * harmonized_cap_loss +
+            #                                            self.lambda_conIso * harmonized_conIso_loss)
+            # self.i += 1
     
-            # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
+            total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
             # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss + \
                         #  att_loss + rep_loss + cap_loss + conIso_loss
 
