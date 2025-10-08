@@ -70,7 +70,7 @@ class SeparationLoss(nn.Module):
         B, L, K, C = prior.shape
         eps = 1e-10
 
-        # --- 1. Calculate JSD ---
+        # --- 1. Calculate JSD and v_norm ---
         p1 = prior.unsqueeze(2) # (B, L, 1, K, C)
         p2 = prior.unsqueeze(1) # (B, 1, L, K, C)
         dist_p1 = Categorical(logits=p1.contiguous())
@@ -83,6 +83,12 @@ class SeparationLoss(nn.Module):
 
         jsd_matrix= 0.5 * (kl_p_m + kl_q_m)
         jsd_matrix = jsd_matrix.mean(dim=-1) * self.scaling_factor # (B, L, L)
+
+        # v_norm for ConIso Loss
+        p1 = rearrange(F.softmax(p1, dim=-1), 'B L 1 K C -> B L 1 (K C)')
+        p2 = rearrange(F.softmax(p2, dim=-1), 'B 1 L K C -> B 1 L (K C)')
+        v_norm = torch.linalg.norm(p1 - p2, dim=-1)
+
 
         # --- 2. Calculate masks ---
         triu_mask = torch.triu(torch.ones(L, L, device=prior.device), diagonal=1)
@@ -97,33 +103,38 @@ class SeparationLoss(nn.Module):
         h1 = h.unsqueeze(2) # (B, L, 1, D_h)
         h2 = h.unsqueeze(1) # (B, 1, L, D_h)
         pairwise_mse = ((h1 - h2)**2).mean(dim=-1) # (B, L, L)
+        h_norm = torch.linalg.norm(h1 - h2, dim=-1)
 
         # Attraction loss
-        att_loss = (pairwise_mse * att_mask).sum() / (att_mask.sum() + eps)
+        att_loss = (pairwise_mse * att_mask).sum() / (B * att_mask.sum() + eps)
         is_gated = att_loss < self.att_loss_gate
         att_loss = torch.where(is_gated, 0.0, att_loss)
         self.stats["att_loss_gated"] = is_gated
 
         # Repulsion loss
         repulsion_enery = torch.exp(-pairwise_mse / self.exp_tmp)
-        rep_loss = (repulsion_enery * rep_mask).sum() / (rep_mask.sum() + eps)
+        rep_loss = (repulsion_enery * rep_mask).sum() / (B * rep_mask.sum() + eps)
         is_gated = rep_loss < self.rep_loss_gate
         rep_loss = torch.where(is_gated, 0.0, rep_loss)
         self.stats["rep_loss_gated"] = is_gated
 
-        # --- 5. Statistics for debugging ---
+        # Conformal Isometry loss
+        conIso_loss = (h_norm / (v_norm + eps))[att_mask.bool()].std()
+        
+        # --- 4. Statistics for debugging ---
         self.stats["pairwise_mse_mean"] = pairwise_mse.mean().item()
         self.stats["pairwise_mse_std"] = pairwise_mse.std().item()
         self.stats["att_pairs_ratio"] = (att_mask.sum() / (triu_mask.sum() * B)).item()
         self.stats["rep_pairs_ratio"] = (rep_mask.sum() / (triu_mask.sum() * B)).item()
         self.stats["att_loss"] = att_loss.item()
         self.stats["rep_loss"] = rep_loss.item()
+        self.stats["conIso_loss"] = conIso_loss.item()
         
         valid_jsd_values = jsd_matrix[triu_mask.unsqueeze(0).expand(B, L, L).bool()]
         self.stats["mean_jsd"] = valid_jsd_values.mean().item()
         self.stats["std_jsd"] = valid_jsd_values.std().item()
 
-        return  att_loss, rep_loss, self.stats
+        return  att_loss, rep_loss, conIso_loss, self.stats
     
 if __name__ == "__main__":
     loss_func = SymLogTwoHotLoss(255, -20, 20)
