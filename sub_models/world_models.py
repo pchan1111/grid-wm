@@ -136,7 +136,6 @@ class DistHead(nn.Module):
         )
         self.velocity_main = nn.Linear(transformer_hidden_dim, transformer_hidden_dim)
         self.fc_mu = nn.Linear(transformer_hidden_dim, velocity_dim)
-        self.fc_log_var = nn.Linear(transformer_hidden_dim, velocity_dim)
 
     def unimix(self, logits, mixing_ratio=0.01):
         # uniform noise mixing
@@ -144,12 +143,6 @@ class DistHead(nn.Module):
         mixed_probs = mixing_ratio * torch.ones_like(probs) / self.stoch_dim + (1-mixing_ratio) * probs
         logits = torch.log(mixed_probs)
         return logits
-    
-    def reparameterize(self, mu, log_std):
-        std = torch.exp(log_std)
-        eps = torch.randn_like(std)
-        
-        return mu + eps * std
 
     def forward_post(self, x):
         logits = self.post_head(x)
@@ -164,15 +157,11 @@ class DistHead(nn.Module):
         logits = self.unimix(logits)
         return logits
 
-
     def forward_velocity(self, x):
         h = self.velocity_main(x)
         mu = self.fc_mu(h)
-        log_std = self.fc_log_var(h)
-        velocity = self.reparameterize(mu, log_std)
-        
-        return velocity
-
+        normal_dist = Normal(mu, 1.0)
+        return normal_dist.rsample()
 
 
 class RewardDecoder(nn.Module):
@@ -348,7 +337,7 @@ class WorldModel(nn.Module):
         with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             dist_feat = self.storm_transformer.forward_with_kv_cache(last_flattened_sample, action)
             velocity = self.dist_head.forward_velocity(dist_feat)
-            prior_logits = self.dist_head.forward_prior(velocity, last_flattened_sample)
+            prior_logits = self.dist_head.forward_prior(last_flattened_sample, velocity)
 
             # decoding
             prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
