@@ -136,10 +136,6 @@ class DistHead(nn.Module):
         )
         self.velocity_main = nn.Linear(transformer_hidden_dim, transformer_hidden_dim)
         self.fc_mu = nn.Linear(transformer_hidden_dim, velocity_dim)
-        self.fc_log_std = nn.Sequential(
-            nn.Linear(transformer_hidden_dim, velocity_dim),
-            nn.Tanh(),
-        )
 
     def unimix(self, logits, mixing_ratio=0.01):
         # uniform noise mixing
@@ -164,8 +160,7 @@ class DistHead(nn.Module):
     def forward_velocity(self, x):
         h = self.velocity_main(x)
         mu = self.fc_mu(h)
-        log_std = self.fc_log_std(h)
-        normal_dist = Normal(mu, torch.exp(log_std))
+        normal_dist = Normal(mu, 1.0)
         return normal_dist.rsample()
 
 
