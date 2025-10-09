@@ -23,7 +23,6 @@ class SymLogLoss(nn.Module):
         target = symlog(target)
         return 0.5*F.mse_loss(output, target)
 
-
 class SymLogTwoHotLoss(nn.Module):
     def __init__(self, num_classes, lower_bound, upper_bound):
         super().__init__()
