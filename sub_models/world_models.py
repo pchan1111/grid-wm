@@ -246,23 +246,23 @@ class WorldModel(nn.Module):
         self.record_run= record_run
 
         # HarmonyDream
-        self.sigma_obs = nn.Parameter(torch.tensor(0.0))
-        self.sigma_reward = nn.Parameter(torch.tensor(0.0))
-        self.sigma_dyn = nn.Parameter(torch.tensor(0.0))
-        self.sigma_att = nn.Parameter(torch.tensor(0.0))
-        self.sigma_rep = nn.Parameter(torch.tensor(0.0))
-        self.sigma_cap = nn.Parameter(torch.tensor(0.0))
-        self.sigma_conIso = nn.Parameter(torch.tensor(0.0))
+        # self.sigma_obs = nn.Parameter(torch.tensor(0.0))
+        # self.sigma_reward = nn.Parameter(torch.tensor(0.0))
+        # self.sigma_dyn = nn.Parameter(torch.tensor(0.0))
+        # self.sigma_att = nn.Parameter(torch.tensor(0.0))
+        # self.sigma_rep = nn.Parameter(torch.tensor(0.0))
+        # self.sigma_cap = nn.Parameter(torch.tensor(0.0))
+        # self.sigma_conIso = nn.Parameter(torch.tensor(0.0))
 
         # Separation loss
-        self.lambda_rep = conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient
-        self.lambda_cap = conf.Models.WorldModel.CapacityLoss.Coefficient
-        self.lambda_conIso = conf.Models.WorldModel.SeparationLoss.ConformalIsometryCoefficient
-        self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
-        self.i = 0
+        # self.lambda_rep = conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient
+        # self.lambda_cap = conf.Models.WorldModel.CapacityLoss.Coefficient
+        # self.lambda_conIso = conf.Models.WorldModel.SeparationLoss.ConformalIsometryCoefficient
+        # self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
+        # self.i = 0
 
         # Capacity loss
-        self.cap_loss_gate = conf.Models.WorldModel.CapacityLoss.Gate
+        # self.cap_loss_gate = conf.Models.WorldModel.CapacityLoss.Gate
 
         self.encoder = EncoderBN(
             in_channels=conf.Models.WorldModel.InChannels,
@@ -457,37 +457,37 @@ class WorldModel(nn.Module):
             representation_loss, representation_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:], prior_logits[:, :-1].detach())
             
             # Separation loss
-            att_loss, rep_loss, conIso_loss, stats = self.separation_loss_func(prior_logits, dist_feat)
+            # att_loss, rep_loss, conIso_loss, stats = self.separation_loss_func(prior_logits, dist_feat)
 
             # capacity loss
-            cap_loss = reduce(dist_feat, "B L D -> D", "mean")
-            cap_loss = -torch.sum(cap_loss ** 2)
-            cap_loss_gated = cap_loss < self.cap_loss_gate
+            # cap_loss = reduce(dist_feat, "B L D -> D", "mean")
+            # cap_loss = -torch.sum(cap_loss ** 2)
+            # cap_loss_gated = cap_loss < self.cap_loss_gate
 
             # HarmonyDream >>>
             # group losses
-            obs_loss = reconstruction_loss
-            reward_loss_group = reward_loss + termination_loss
-            dynamics_loss_group = 0.5 * dynamics_loss + 0.1 * representation_loss
+            # obs_loss = reconstruction_loss
+            # reward_loss_group = reward_loss + termination_loss
+            # dynamics_loss_group = 0.5 * dynamics_loss + 0.1 * representation_loss
 
             # get sigmas
-            sigma_obs = torch.exp(self.sigma_obs)
-            sigma_reward = torch.exp(self.sigma_reward)
-            sigma_dyn = torch.exp(self.sigma_dyn)
-            sigma_att = torch.exp(self.sigma_att)
-            sigma_rep = torch.exp(self.sigma_rep)
-            sigma_cap = torch.exp(self.sigma_cap)
-            sigma_conIso = torch.exp(self.sigma_conIso)
+            # sigma_obs = torch.exp(self.sigma_obs)
+            # sigma_reward = torch.exp(self.sigma_reward)
+            # sigma_dyn = torch.exp(self.sigma_dyn)
+            # sigma_att = torch.exp(self.sigma_att)
+            # sigma_rep = torch.exp(self.sigma_rep)
+            # sigma_cap = torch.exp(self.sigma_cap)
+            # sigma_conIso = torch.exp(self.sigma_conIso)
 
             # Calculate rectified Harmonious Loss
-            harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
-            harmonized_reward_loss = reward_loss_group / sigma_reward + torch.log(1 + sigma_reward)
-            harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
-            harmonized_att_loss = torch.where(stats['att_loss_gated'], 0.0, att_loss / sigma_att + torch.log(1 + sigma_att))
-            harmonized_rep_loss = torch.where(stats['rep_loss_gated'], 0.0, rep_loss / sigma_rep + torch.log(1 + sigma_rep))
-            harmonized_cap_loss = torch.where(cap_loss_gated, 0.0, 
-                                              cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap))
-            harmonized_conIso_loss = conIso_loss / sigma_conIso + torch.log(1 + sigma_conIso)
+            # harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
+            # harmonized_reward_loss = reward_loss_group / sigma_reward + torch.log(1 + sigma_reward)
+            # harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
+            # harmonized_att_loss = torch.where(stats['att_loss_gated'], 0.0, att_loss / sigma_att + torch.log(1 + sigma_att))
+            # harmonized_rep_loss = torch.where(stats['rep_loss_gated'], 0.0, rep_loss / sigma_rep + torch.log(1 + sigma_rep))
+            # harmonized_cap_loss = torch.where(cap_loss_gated, 0.0, 
+            #                                   cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap))
+            # harmonized_conIso_loss = conIso_loss / sigma_conIso + torch.log(1 + sigma_conIso)
             # <<< HarmonyDream
             
             # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
@@ -519,27 +519,27 @@ class WorldModel(nn.Module):
                 "WorldModel/1.2.termination_loss": termination_loss.item(),
                 "WorldModel/1.3.dynamics_loss": dynamics_loss.item(),
                 "WorldModel/1.4.representation_loss": representation_loss.item(), 
-                "WorldModel/1.5.att_loss": att_loss.item(),
-                "WorldModel/1.6.rep_loss": rep_loss.item(),
-                "WorldModel/1.7.cap_loss": cap_loss.item(), 
-                "WorldMode;/1.8.conIso_loss": conIso_loss.item(),
-                "WorldModel/1.8.harmonized_obs_loss": harmonized_obs_loss.item(),
-                "WorldModel/2.0.harmonized_reward_loss": harmonized_reward_loss.item(),
-                "WorldModel/2.1.harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
-                "WorldModel/2.2.harmonized_att_loss": harmonized_att_loss.item(),
-                "WorldModel/2.3.harmonized_rep_loss": harmonized_rep_loss.item(),
-                "WorldModel/2.4.harmonized_cap_loss": harmonized_cap_loss.item(),
-                "WorldModel/2.5.harmonized_conIso_loss": harmonized_conIso_loss.item(),
+                # "WorldModel/1.5.att_loss": att_loss.item(),
+                # "WorldModel/1.6.rep_loss": rep_loss.item(),
+                # "WorldModel/1.7.cap_loss": cap_loss.item(), 
+                # "WorldMode;/1.8.conIso_loss": conIso_loss.item(),
+                # "WorldModel/1.8.harmonized_obs_loss": harmonized_obs_loss.item(),
+                # "WorldModel/2.0.harmonized_reward_loss": harmonized_reward_loss.item(),
+                # "WorldModel/2.1.harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
+                # "WorldModel/2.2.harmonized_att_loss": harmonized_att_loss.item(),
+                # "WorldModel/2.3.harmonized_rep_loss": harmonized_rep_loss.item(),
+                # "WorldModel/2.4.harmonized_cap_loss": harmonized_cap_loss.item(),
+                # "WorldModel/2.5.harmonized_conIso_loss": harmonized_conIso_loss.item(),
                 "WorldModel/2.5.total_loss": total_loss.item(),
-                "sep_loss/1.0.mean_jsd": stats["mean_jsd"],
-                "sep_loss/1.1.std_jsd": stats["std_jsd"],
-                "sep_loss/2.0.pairwise_mse_mean": stats["pairwise_mse_mean"],
-                "sep_loss/2.1.pairwise_mse_std": stats["pairwise_mse_std"],
-                "sep_loss/3.0.att_loss": stats["att_loss"],
-                "sep_loss/3.1.rep_loss": stats["rep_loss"],
-                "sep_loss/3.2.conIso_loss": stats["conIso_loss"],
-                "sep_loss/4.0.att_pairs_ratio": stats["att_pairs_ratio"],
-                "sep_loss/5.0.rep_pairs_ratio": stats["rep_pairs_ratio"],
+                # "sep_loss/1.0.mean_jsd": stats["mean_jsd"],
+                # "sep_loss/1.1.std_jsd": stats["std_jsd"],
+                # "sep_loss/2.0.pairwise_mse_mean": stats["pairwise_mse_mean"],
+                # "sep_loss/2.1.pairwise_mse_std": stats["pairwise_mse_std"],
+                # "sep_loss/3.0.att_loss": stats["att_loss"],
+                # "sep_loss/3.1.rep_loss": stats["rep_loss"],
+                # "sep_loss/3.2.conIso_loss": stats["conIso_loss"],
+                # "sep_loss/4.0.att_pairs_ratio": stats["att_pairs_ratio"],
+                # "sep_loss/5.0.rep_pairs_ratio": stats["rep_pairs_ratio"],
             }, step=total_steps)
         
         # if logger is not None:
