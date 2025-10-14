@@ -120,22 +120,11 @@ class DistHead(nn.Module):
     '''
     Dist: abbreviation of distribution
     '''
-    def __init__(self, image_feat_dim, transformer_hidden_dim, stoch_dim, velocity_dim) -> None:
+    def __init__(self, image_feat_dim, transformer_hidden_dim, stoch_dim) -> None:
         super().__init__()
-        hidden_dim = stoch_dim * stoch_dim
         self.stoch_dim = stoch_dim
         self.post_head = nn.Linear(image_feat_dim, stoch_dim*stoch_dim)
-        self.prior_head = nn.Sequential(
-            nn.Linear(stoch_dim*stoch_dim+velocity_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, stoch_dim*stoch_dim)
-        )
-        self.velocity_main = nn.Linear(transformer_hidden_dim, transformer_hidden_dim)
-        self.fc_mu = nn.Linear(transformer_hidden_dim, velocity_dim)
+        self.prior_head = nn.Linear(transformer_hidden_dim, stoch_dim*stoch_dim)
 
     def unimix(self, logits, mixing_ratio=0.01):
         # uniform noise mixing
@@ -150,18 +139,11 @@ class DistHead(nn.Module):
         logits = self.unimix(logits)
         return logits
 
-    def forward_prior(self, z_t, velocity):
-        x = torch.cat([z_t, velocity], dim=-1)
+    def forward_prior(self, x):
         logits = self.prior_head(x)
         logits = rearrange(logits, "B L (K C) -> B L K C", K=self.stoch_dim)
         logits = self.unimix(logits)
         return logits
-
-    def forward_velocity(self, x):
-        h = self.velocity_main(x)
-        mu = self.fc_mu(h)
-        normal_dist = Normal(mu, 1.0)
-        return normal_dist.rsample()
 
 
 class RewardDecoder(nn.Module):
@@ -245,25 +227,6 @@ class WorldModel(nn.Module):
         self.imagine_batch_length = -1
         self.record_run= record_run
 
-        # HarmonyDream
-        # self.sigma_obs = nn.Parameter(torch.tensor(0.0))
-        # self.sigma_reward = nn.Parameter(torch.tensor(0.0))
-        # self.sigma_dyn = nn.Parameter(torch.tensor(0.0))
-        # self.sigma_att = nn.Parameter(torch.tensor(0.0))
-        # self.sigma_rep = nn.Parameter(torch.tensor(0.0))
-        # self.sigma_cap = nn.Parameter(torch.tensor(0.0))
-        # self.sigma_conIso = nn.Parameter(torch.tensor(0.0))
-
-        # Separation loss
-        # self.lambda_rep = conf.Models.WorldModel.SeparationLoss.RepulsionCoefficient
-        # self.lambda_cap = conf.Models.WorldModel.CapacityLoss.Coefficient
-        # self.lambda_conIso = conf.Models.WorldModel.SeparationLoss.ConformalIsometryCoefficient
-        # self.sep_loss_balance = conf.Models.WorldModel.SeparationLoss.SeparationLossBalance
-        # self.i = 0
-
-        # Capacity loss
-        # self.cap_loss_gate = conf.Models.WorldModel.CapacityLoss.Gate
-
         self.encoder = EncoderBN(
             in_channels=conf.Models.WorldModel.InChannels,
             stem_channels=32,
@@ -283,7 +246,6 @@ class WorldModel(nn.Module):
             image_feat_dim=self.encoder.last_channels*self.final_feature_width*self.final_feature_width,
             transformer_hidden_dim=self.transformer_hidden_dim,
             stoch_dim=self.stoch_dim,
-            velocity_dim=conf.Models.WorldModel.VelocityDim
         )
         self.image_decoder = DecoderBN(
             stoch_dim=self.stoch_flattened_dim,
@@ -327,8 +289,7 @@ class WorldModel(nn.Module):
             temporal_mask = get_subsequent_mask(latent)
             dist_feat = self.storm_transformer(latent, action, temporal_mask)
             last_dist_feat = dist_feat[:, -1:]
-            velocity = self.dist_head.forward_velocity(last_dist_feat)
-            prior_logits = self.dist_head.forward_prior(latent[:, -1:], velocity)
+            prior_logits = self.dist_head.forward_prior(last_dist_feat)
             prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
             prior_flattened_sample = self.flatten_sample(prior_sample)
         return prior_flattened_sample, last_dist_feat
@@ -336,8 +297,7 @@ class WorldModel(nn.Module):
     def predict_next(self, last_flattened_sample, action, log_video=True):
         with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
             dist_feat = self.storm_transformer.forward_with_kv_cache(last_flattened_sample, action)
-            velocity = self.dist_head.forward_velocity(dist_feat)
-            prior_logits = self.dist_head.forward_prior(last_flattened_sample, velocity)
+            prior_logits = self.dist_head.forward_prior(dist_feat)
 
             # decoding
             prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
@@ -438,10 +398,7 @@ class WorldModel(nn.Module):
             # transformer
             temporal_mask = get_subsequent_mask_with_batch_length(batch_length, flattened_sample.device) # (1, L, L)
             dist_feat = self.storm_transformer(flattened_sample, action, temporal_mask) # (B, L, h)
-            
-            # velocity
-            velocity = self.dist_head.forward_velocity(dist_feat)
-            prior_logits = self.dist_head.forward_prior(flattened_sample, velocity)
+            prior_logits = self.dist_head.forward_prior(dist_feat)
             
             # decoding reward and termination with dist_feat
             reward_hat = self.reward_decoder(dist_feat)
@@ -455,54 +412,8 @@ class WorldModel(nn.Module):
             # dyn-rep loss
             dynamics_loss, dynamics_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:].detach(), prior_logits[:, :-1])
             representation_loss, representation_real_kl_div = self.categorical_kl_div_loss(post_logits[:, 1:], prior_logits[:, :-1].detach())
-            
-            # Separation loss
-            # att_loss, rep_loss, conIso_loss, stats = self.separation_loss_func(prior_logits, dist_feat)
-
-            # capacity loss
-            # cap_loss = reduce(dist_feat, "B L D -> D", "mean")
-            # cap_loss = -torch.sum(cap_loss ** 2)
-            # cap_loss_gated = cap_loss < self.cap_loss_gate
-
-            # HarmonyDream >>>
-            # group losses
-            # obs_loss = reconstruction_loss
-            # reward_loss_group = reward_loss + termination_loss
-            # dynamics_loss_group = 0.5 * dynamics_loss + 0.1 * representation_loss
-
-            # get sigmas
-            # sigma_obs = torch.exp(self.sigma_obs)
-            # sigma_reward = torch.exp(self.sigma_reward)
-            # sigma_dyn = torch.exp(self.sigma_dyn)
-            # sigma_att = torch.exp(self.sigma_att)
-            # sigma_rep = torch.exp(self.sigma_rep)
-            # sigma_cap = torch.exp(self.sigma_cap)
-            # sigma_conIso = torch.exp(self.sigma_conIso)
-
-            # Calculate rectified Harmonious Loss
-            # harmonized_obs_loss = obs_loss / sigma_obs + torch.log(1 + sigma_obs)
-            # harmonized_reward_loss = reward_loss_group / sigma_reward + torch.log(1 + sigma_reward)
-            # harmonized_dynamics_loss = dynamics_loss_group / sigma_dyn + torch.log(1 + sigma_dyn)
-            # harmonized_att_loss = torch.where(stats['att_loss_gated'], 0.0, att_loss / sigma_att + torch.log(1 + sigma_att))
-            # harmonized_rep_loss = torch.where(stats['rep_loss_gated'], 0.0, rep_loss / sigma_rep + torch.log(1 + sigma_rep))
-            # harmonized_cap_loss = torch.where(cap_loss_gated, 0.0, 
-            #                                   cap_loss / sigma_cap.detach() - cap_loss.detach() / sigma_cap + torch.log(1 + sigma_cap))
-            # harmonized_conIso_loss = conIso_loss / sigma_conIso + torch.log(1 + sigma_conIso)
-            # <<< HarmonyDream
-            
-            # total_loss = harmonized_obs_loss + harmonized_reward_loss + harmonized_dynamics_loss
-            # if self.i > 20000: 
-            #     total_loss += self.sep_loss_balance * (harmonized_att_loss + 
-            #                                            self.lambda_rep * harmonized_rep_loss +
-            #                                            self.lambda_cap * harmonized_cap_loss +
-            #                                            self.lambda_conIso * harmonized_conIso_loss)
-            # self.i += 1
     
             total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss
-            # total_loss = reconstruction_loss + reward_loss + termination_loss + 0.5*dynamics_loss + 0.1*representation_loss + \
-                        #  att_loss + rep_loss + cap_loss + conIso_loss
-
-            
 
         # gradient descent
         self.scaler.scale(total_loss).backward()
@@ -519,27 +430,7 @@ class WorldModel(nn.Module):
                 "WorldModel/1.2.termination_loss": termination_loss.item(),
                 "WorldModel/1.3.dynamics_loss": dynamics_loss.item(),
                 "WorldModel/1.4.representation_loss": representation_loss.item(), 
-                # "WorldModel/1.5.att_loss": att_loss.item(),
-                # "WorldModel/1.6.rep_loss": rep_loss.item(),
-                # "WorldModel/1.7.cap_loss": cap_loss.item(), 
-                # "WorldMode;/1.8.conIso_loss": conIso_loss.item(),
-                # "WorldModel/1.8.harmonized_obs_loss": harmonized_obs_loss.item(),
-                # "WorldModel/2.0.harmonized_reward_loss": harmonized_reward_loss.item(),
-                # "WorldModel/2.1.harmonized_dynamics_loss": harmonized_dynamics_loss.item(),
-                # "WorldModel/2.2.harmonized_att_loss": harmonized_att_loss.item(),
-                # "WorldModel/2.3.harmonized_rep_loss": harmonized_rep_loss.item(),
-                # "WorldModel/2.4.harmonized_cap_loss": harmonized_cap_loss.item(),
-                # "WorldModel/2.5.harmonized_conIso_loss": harmonized_conIso_loss.item(),
                 "WorldModel/2.5.total_loss": total_loss.item(),
-                # "sep_loss/1.0.mean_jsd": stats["mean_jsd"],
-                # "sep_loss/1.1.std_jsd": stats["std_jsd"],
-                # "sep_loss/2.0.pairwise_mse_mean": stats["pairwise_mse_mean"],
-                # "sep_loss/2.1.pairwise_mse_std": stats["pairwise_mse_std"],
-                # "sep_loss/3.0.att_loss": stats["att_loss"],
-                # "sep_loss/3.1.rep_loss": stats["rep_loss"],
-                # "sep_loss/3.2.conIso_loss": stats["conIso_loss"],
-                # "sep_loss/4.0.att_pairs_ratio": stats["att_pairs_ratio"],
-                # "sep_loss/5.0.rep_pairs_ratio": stats["rep_pairs_ratio"],
             }, step=total_steps)
         
         # if logger is not None:

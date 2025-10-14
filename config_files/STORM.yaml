@@ -29,7 +29,7 @@ Models:
     TransformerHiddenDim: 512
     TransformerNumLayers: 2
     TransformerNumHeads: 8
-    VelocityDim: 32
+    VelocityDim: 16
     LearningRate: 1e-4
     WeightDecay: 1e-3
     CapacityLoss:
