@@ -1,5 +1,5 @@
 env_name=MsPacman
-seed=1
+seed=2
 python -u train.py \
     -n "v(sampleDiff)+Anchor(NO)+Distance(KL)+Transformer(NoInput)+ContextLength(8)+ActorCritic(Original)-${env_name}-life_done-wm_2L512D8H-100k-seed${seed}" \
     -seed ${seed} \
