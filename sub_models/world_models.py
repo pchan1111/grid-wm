@@ -598,26 +598,11 @@ class WorldModel(nn.Module):
                 "WorldModel/2.5.total_loss": total_loss.item(),
             }, step=total_steps)
         
-        # if logger is not None:
-            # logger.log("WorldModel/reconstruction_loss", reconstruction_loss.item())
-            # logger.log("WorldModel/reward_loss", reward_loss.item())
-            # logger.log("WorldModel/termination_loss", termination_loss.item())
-            # logger.log("WorldModel/dynamics_loss", dynamics_loss.item())
-            # logger.log("WorldModel/dynamics_real_kl_div", dynamics_real_kl_div.item())
-            # logger.log("WorldModel/representation_loss", representation_loss.item())
-            # logger.log("WorldModel/representation_real_kl_div", representation_real_kl_div.item())
-            # logger.log("WorldModel/total_loss", total_loss.item())
-            # logger.log("sep_loss/1.mean_jsd", stats["mean_jsd"])
-            # logger.log("sep_loss/1.std_jsd", stats["std_jsd"])
-            # logger.log("sep_loss/2.pairwise_mse_mean", stats["pairwise_mse_mean"])
-            # logger.log("sep_loss/2.pairwise_mse_std", stats["pairwise_mse_std"])
-            # logger.log("sep_loss/3.sotf_att", stats["soft_att"])
-            # logger.log("sep_loss/3.soft_rep", stats["sotf_rep"])
-            # logger.log("sep_loss/4.att_loss", stats["att_loss"])
-            # logger.log("sep_loss/4.rep_loss", stats["rep_loss"])
-            # logger.log("sep_loss/5.att_pairs_ratio", stats["att_pairs_ratio"])
-            # logger.log("sep_loss/5.rep_pairs_ratio", stats["rep_pairs_ratio"])
-            # logger.log("sep_loss/6.threshold", self.sep_threshold.item())
-            # logger.log("sep_loss/6.sep_threshold_grad", stats["sep_threshold_grad"])
-            
-
+            if logger is not None:
+                logger.log("WorldModel/1.0.reconstruction_loss", reconstruction_loss.item())
+                logger.log("WorldModel/1.1.reward_loss", reward_loss.item())
+                logger.log("WorldModel/1.2.termination_loss", termination_loss.item())
+                logger.log("WorldModel/1.3.dynamics_loss", dynamics_loss.item())
+                logger.log("WorldModel/1.4.representation_loss", representation_loss.item())
+                logger.log("WorldModel/1.5.grid_cell_loss", grid_cell_loss.item())
+                logger.log("WorldModel/total_loss", total_loss.item())

@@ -133,15 +133,16 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
         if done_flag.any():
             for i in range(num_envs):
                 if done_flag[i]:
-                    # logger.log(f"sample/{env_name}_reward", sum_reward[i])
-                    # logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
-                    # logger.log("replay_buffer/length", len(replay_buffer))
                     if record_run:
                         wandb.log({
                             f"sample/{env_name}_reward": sum_reward[i],
                             f"sample/{env_name}_episode_steps": current_info["episode_frame_number"][i]//4,
                             "replay_buffer/length": len(replay_buffer)
                         }, step=total_steps)
+                        if logger is not None:
+                            logger.log(f"sample/{env_name}_reward", sum_reward[i])
+                            logger.log(f"sample/{env_name}_episode_steps", current_info["episode_frame_number"][i]//4)  # framskip=4
+                            logger.log("replay_buffer/length", len(replay_buffer))
                         sum_reward[i] = 0
 
         # update current_obs, current_info and sum_reward
@@ -230,15 +231,20 @@ if __name__ == "__main__":
 
     # set seed
     seed_np_torch(seed=args.seed)
-    # tensorboard writer
-    # logger = Logger(path=f"runs/{args.n}")
-    logger = None
+
     # copy config file
     if args.record_run:
         destination_path = f"runs/{args.n}/config.yaml"
         destination_dir = os.path.dirname(destination_path)
         os.makedirs(destination_dir, exist_ok=True)
         shutil.copy(args.config_path, destination_path)
+
+        # tensorboard writer
+        logger = Logger(path=f"runs/{args.n}")
+        # copy config file
+        shutil.copy(args.config_path, f"runs/{args.n}/config.yaml")
+    else:
+        logger = None
 
     # WandB
     if args.record_run:
