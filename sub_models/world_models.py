@@ -260,11 +260,15 @@ class GridCell(nn.Module):
         )
 
         self.recurrent_layer = nn.Linear(grid_cell_dim, grid_cell_dim, bias=False)
-        self.input_layer = nn.Linear(stoch_flattened_dim, grid_cell_dim, bias=False)
+        self.input_layer = nn.Sequential(
+            nn.Linear(stoch_flattened_dim+grid_cell_dim, stoch_flattened_dim+grid_cell_dim, bias=False),
+            nn.Linear(stoch_flattened_dim+grid_cell_dim, grid_cell_dim, bias=False)
+        )
         
         nn.init.eye_(self.recurrent_layer.weight)
     
     def forward(self, latents_seq):
+        assert not latents_seq.requires_grad
         batch_size = latents_seq.shape[0]
         batch_length = latents_seq.shape[1]
 
@@ -275,16 +279,17 @@ class GridCell(nn.Module):
         velocities = latents_seq[:, 1:] - latents_seq[:, :-1]
 
         # 3. Get anchor representation (get grid cells from latents)
-        # anchor_g_seq = self.encode_latent_to_grid(latents_seq[:, 1:])
+        anchor_g_seq = self.initial_state_encoder(latents_seq[:, 1:])
 
         # 4. Create inputs
-        rnn_inputs = velocities # torch.cat([velocities, anchor_g_seq], dim=-1)
+        # rnn_inputs = velocities 
+        rnn_inputs = torch.cat([velocities, anchor_g_seq], dim=-1)
 
         # 5. RNN
         g_seq = torch.zeros(batch_size, batch_length, self.grid_cell_dim, device=latents_seq.device)
         g_seq[:, 0:1] = g_t
         for t in range(batch_length):
-            update = self.recurrent_layer(g_t) + self.input_layer(velocities[:, t:t+1])
+            update = self.recurrent_layer(g_t) + self.input_layer(rnn_inputs[:, t:t+1])
             g_t = norm_relu(update)
             g_seq[:, t+1:t+2] = g_t
 
@@ -297,8 +302,9 @@ class GridCell(nn.Module):
         if self.prev_g is None:
             self.prev_g = self.initial_state_encoder(prev_latent)
         velocity = current_latent - prev_latent
-        # anchor_g = ...
-        update = self.recurrent_layer(self.prev_g) + self.input_layer(velocity)
+        anchor_g = self.initial_state_encoder(current_latent)
+        rnn_input = torch.cat([velocity, anchor_g], dim=-1)
+        update = self.recurrent_layer(self.prev_g) + self.input_layer(rnn_input)
         new_g = norm_relu(update)
         self.prev_g = new_g
 
@@ -549,7 +555,7 @@ class WorldModel(nn.Module):
 
             # >>> Grid Cells
 
-            g_seq = self.grid_cell(flattened_sample)
+            g_seq = self.grid_cell(flattened_sample.detach())
             
             grid_cell_loss = self.grid_cell_loss(g_seq, post_logits)
 
