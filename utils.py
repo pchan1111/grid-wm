@@ -78,6 +78,7 @@ def load_config(config_path):
     conf.Models.WorldModel.TransformerNumLayers = 0
     conf.Models.WorldModel.TransformerNumHeads = 0
     conf.Models.WorldModel.VelocityDim = 0
+    conf.Models.WorldModel.GridCellsDim = 0
     conf.Models.WorldModel.LearningRate = 0.0
     conf.Models.WorldModel.WeightDecay = 0.0
     conf.Models.WorldModel.CapacityLoss = CN()

@@ -30,6 +30,7 @@ Models:
     TransformerNumLayers: 2
     TransformerNumHeads: 8
     VelocityDim: 16
+    GridCellsDim: 256
     LearningRate: 1e-4
     WeightDecay: 1e-3
     CapacityLoss:

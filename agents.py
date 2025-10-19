@@ -38,7 +38,7 @@ def calc_lambda_return(rewards, values, termination, gamma, lam, dtype=torch.flo
 class ActorCriticAgent(nn.Module):
     def __init__(self, action_dim, record_run, conf) -> None:
         super().__init__()
-        feat_dim = 32*32+conf.Models.WorldModel.TransformerHiddenDim
+        feat_dim = 32*32+conf.Models.WorldModel.TransformerHiddenDim+conf.Models.WorldModel.GridCellsDim
         num_layers = conf.Models.Agent.NumLayers
         hidden_dim = conf.Models.Agent.HiddenDim
         self.gamma = conf.Models.Agent.Gamma
