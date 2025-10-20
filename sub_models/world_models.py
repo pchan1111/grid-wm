@@ -293,7 +293,7 @@ class GridCell(nn.Module):
             g_t = norm_relu(update)
             g_seq[:, t+1:t+2] = g_t
 
-        return g_seq
+        return g_seq, anchor_g_seq
     
     def reset(self):
         self.prev_g = None
@@ -342,7 +342,7 @@ class GridCellLoss(nn.Module):
         
         return torch.stack(batch_dists)
 
-    def forward(self, g_seq, latents_logits_seq):
+    def forward(self, g_seq, latents_logits_seq, anchor_g_seq):
         batch_size = g_seq.shape[0]
 
         # --- 1. Distance Preservation Loss ---
@@ -355,8 +355,11 @@ class GridCellLoss(nn.Module):
         # --- 2. Capacity Loss ---
         loss_cap = torch.mean(-torch.sum(g_seq, dim=-1))
 
-        # --- 3. Add up all losses
-        total_loss = self.alpha * loss_dist + (1 - self.alpha) * loss_cap
+        # --- 3. Anchor Loss ---
+        loss_anchor = F.mse_loss(g_seq[:, 1:].detach(), anchor_g_seq)
+
+        # --- 4. Add up all losses
+        total_loss = self.alpha * loss_dist + (1 - self.alpha) * loss_cap + loss_anchor
 
         return total_loss
 
@@ -555,9 +558,9 @@ class WorldModel(nn.Module):
 
             # >>> Grid Cells
 
-            g_seq = self.grid_cell(flattened_sample.detach())
-            
-            grid_cell_loss = self.grid_cell_loss(g_seq, post_logits)
+            g_seq, anchor_g_seq = self.grid_cell(flattened_sample.detach())
+
+            grid_cell_loss = self.grid_cell_loss(g_seq, post_logits, anchor_g_seq)
 
             # <<< Grid Cells End
 

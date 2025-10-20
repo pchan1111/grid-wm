@@ -114,7 +114,7 @@ def joint_train_world_model_agent(env_name, max_steps, num_envs, image_size,
                     model_context_action = torch.Tensor(model_context_action).cuda()
                     prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action) # (num_envs, 1, 1024), (num_envs,1, 32*32)
                     # Grid cell part
-                    g_seq = world_model.grid_cell(torch.cat([context_latent, prior_flattened_sample], dim=1).detach()) # (num_envs, context_length+1, grid_cell_dim)
+                    g_seq, anchor_g_seq = world_model.grid_cell(torch.cat([context_latent, prior_flattened_sample], dim=1).detach()) # (num_envs, context_length+1, grid_cell_dim)
                     last_g = g_seq[:, -1:]
                     action = agent.sample_as_env_action(
                         torch.cat([prior_flattened_sample, last_dist_feat, last_g], dim=-1),
