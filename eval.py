@@ -65,6 +65,7 @@ def eval_episodes(num_episode, env_name, max_steps, num_envs, image_size,
     context_obs = deque(maxlen=16)
     context_action = deque(maxlen=16)
 
+
     final_rewards = []
     # for total_steps in tqdm(range(max_steps//num_envs)):
     while True:
@@ -77,8 +78,10 @@ def eval_episodes(num_episode, env_name, max_steps, num_envs, image_size,
                 model_context_action = np.stack(list(context_action), axis=1)
                 model_context_action = torch.Tensor(model_context_action).cuda()
                 prior_flattened_sample, last_dist_feat = world_model.calc_last_dist_feat(context_latent, model_context_action)
+                world_model.grid_cell.step(prior_flattened_sample, context_latent[:, -1:])
+                g = world_model.grid_cell.prev_g
                 action = agent.sample_as_env_action(
-                    torch.cat([prior_flattened_sample, last_dist_feat], dim=-1),
+                    torch.cat([prior_flattened_sample, last_dist_feat, g], dim=-1),
                     greedy=False
                 )
 
@@ -146,7 +149,7 @@ if __name__ == "__main__":
         agent.load_state_dict(torch.load(f"{root_path}/agent_{step}.pth"))
         # # eval
         episode_avg_return = eval_episodes(
-            num_episode=20,
+            num_episode=100,
             env_name=args.env_name,
             num_envs=5,
             max_steps=conf.JointTrainAgent.SampleMaxSteps,

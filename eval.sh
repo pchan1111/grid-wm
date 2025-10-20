@@ -2,5 +2,5 @@ env_name=MsPacman
 seed=1
 python -u eval.py \
     -env_name "ALE/${env_name}-v5" \
-    -run_name "v1.1.2-NORMAL-${env_name}-life_done-wm_2L512D8H-100k-seed${seed}" \
+    -run_name "v(sampleDiff)+Anchor(YES+z_detach()+AnchorLoss)+Distance(KL)+Transformer(NoInput)+ContextLength(8)+ActorCritic(Original)+HyperParameter(Original)+ModelSize(+1_inputLayer)-${env_name}-life_done-wm_2L512D8H-100k-seed${seed}" \
     -config_path "config_files/STORM.yaml" \
