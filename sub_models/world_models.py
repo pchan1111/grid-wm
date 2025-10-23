@@ -222,7 +222,7 @@ class WorldModel(nn.Module):
         self.stoch_dim = 32
         self.stoch_flattened_dim = self.stoch_dim*self.stoch_dim
         self.use_amp = True
-        self.tensor_dtype = torch.float16 if self.use_amp else torch.float32
+        self.tensor_dtype = torch.bfloat16 if self.use_amp else torch.float32
         self.imagine_batch_size = -1
         self.imagine_batch_length = -1
         self.record_run= record_run
@@ -276,7 +276,7 @@ class WorldModel(nn.Module):
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     def encode_obs(self, obs):
-        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
             embedding = self.encoder(obs)
             post_logits = self.dist_head.forward_post(embedding)
             sample = self.straight_throught_gradient(post_logits, sample_mode="random_sample")
@@ -285,7 +285,7 @@ class WorldModel(nn.Module):
         return flattened_sample
 
     def calc_last_dist_feat(self, latent, action):
-        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
             temporal_mask = get_subsequent_mask(latent)
             dist_feat = self.storm_transformer(latent, action, temporal_mask)
             last_dist_feat = dist_feat[:, -1:]
@@ -307,7 +307,7 @@ class WorldModel(nn.Module):
             prior_flattened_sample: (B, 1, stoch_dim*stoch_dim)
             last_dist_feat: (B, 1, transformer_hidden_dim)
         """
-        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
             # Use KV cache to process only the new token
             last_dist_feat = self.storm_transformer.forward_with_kv_cache(latent, action)
             
@@ -318,7 +318,7 @@ class WorldModel(nn.Module):
         return prior_flattened_sample, last_dist_feat
 
     def predict_next(self, last_flattened_sample, action, log_video=True):
-        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
             # Use KV cache for efficient computation
             prior_flattened_sample, last_dist_feat = self.calc_last_dist_feat_with_kv_cache(last_flattened_sample, action)
             
@@ -372,7 +372,7 @@ class WorldModel(nn.Module):
 
         self.storm_transformer.reset_kv_cache_list(imagine_batch_size, dtype=self.tensor_dtype)
         
-        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
             # context - don't decode images during context processing
             context_latent = self.encode_obs(sample_obs)
             for i in range(sample_obs.shape[1]):  # context_length is sample_obs.shape[1]
@@ -416,7 +416,7 @@ class WorldModel(nn.Module):
         self.train()
         batch_size, batch_length = obs.shape[:2]
 
-        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.use_amp):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
             # encoding
             embedding = self.encoder(obs) # (B, L, 4096)
             post_logits = self.dist_head.forward_post(embedding) # (B, L, stoch_dim, stoch_dim)

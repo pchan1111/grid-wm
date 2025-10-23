@@ -262,6 +262,10 @@ if __name__ == "__main__":
         # build world model and agent
         world_model = build_world_model(action_dim, args.record_run, conf)
         agent = build_agent(action_dim, args.record_run, conf)
+        # You should avoid using torch.compile for your paper experiments,
+        # since it may bring non-negligible differences compared to the uncompiled version.
+        world_model = torch.compile(world_model)
+        agent = torch.compile(agent)
 
         # build replay buffer
         replay_buffer = ReplayBuffer(
