@@ -70,7 +70,7 @@ class MaxLast2FrameSkipWrapper(gymnasium.Wrapper):
 
 def build_single_env(env_name, image_size):
     env = gymnasium.make(env_name, full_action_space=True, frameskip=1)
-    from gymnasium.wrappers import AtariPreprocessing
+    from gymnasium.wrappers.atari_preprocessing import AtariPreprocessing
     env = AtariPreprocessing(env, screen_size=image_size, grayscale_obs=False)
     return env
 

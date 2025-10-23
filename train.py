@@ -1,5 +1,5 @@
 import gymnasium
-# import ale_py
+import ale_py
 import argparse
 # from torch.utils.tensorboard import SummaryWriter
 # import cv2
