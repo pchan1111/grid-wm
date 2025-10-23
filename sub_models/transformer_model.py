@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import repeat, rearrange
 
-from sub_models.attention_blocks import get_vector_mask
 from sub_models.attention_blocks import PositionalEncoding1D, AttentionBlock, AttentionBlockKVCache
 
 
@@ -83,8 +82,7 @@ class StochasticTransformerKVCache(nn.Module):
         Each element is a tuple of (k_cache, v_cache) for each layer
         k_cache, v_cache: (B, n_head, L_cache, d_k/d_v)
         '''
-        if max_cache_length is not None:
-            self.max_cache_length = max_cache_length
+        self.max_cache_length = max_cache_length
             
         self.kv_cache_list = []
         num_heads = self.layer_stack[0].slf_attn.n_head
@@ -106,7 +104,9 @@ class StochasticTransformerKVCache(nn.Module):
         
         # Get current cache length
         current_cache_len = self.kv_cache_list[0][0].shape[2]  # k_cache.shape = (B, n_head, L, d_k)
-        mask = get_vector_mask(current_cache_len + 1, samples.device)
+        # Use None as mask - attention to all previous tokens (including current) is allowed
+        # The causal constraint is already enforced by only having access to past KV cache
+        mask = None
         action = F.one_hot(action.long(), self.action_dim).float()
         feats = self.stem(torch.cat([samples, action], dim=-1))
         feats = self.position_encoding.forward_with_position(feats, position=current_cache_len)
