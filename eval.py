@@ -146,7 +146,7 @@ if __name__ == "__main__":
         agent.load_state_dict(torch.load(f"{root_path}/agent_{step}.pth"))
         # # eval
         episode_avg_return = eval_episodes(
-            num_episode=20,
+            num_episode=100,
             env_name=args.env_name,
             num_envs=5,
             max_steps=conf.JointTrainAgent.SampleMaxSteps,
