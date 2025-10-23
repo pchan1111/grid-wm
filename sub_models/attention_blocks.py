@@ -94,6 +94,52 @@ class MultiHeadAttention(nn.Module):
         q = self.layer_norm(q)
 
         return q, attn
+    
+    def forward_with_kv_cache(self, q, k_cache, v_cache, mask=None):
+        """
+        Forward pass that returns projected k, v for caching.
+        Args:
+            q: query input (B, 1, D) - new token
+            k_cache: cached keys (B, n_head, L_cache, d_k) - already projected
+            v_cache: cached values (B, n_head, L_cache, d_v) - already projected
+        Returns:
+            output: (B, 1, D)
+            attn: attention weights
+            new_k: new projected key (B, n_head, 1, d_k)
+            new_v: new projected value (B, n_head, 1, d_v)
+        """
+        d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
+        sz_b, len_q = q.size(0), q.size(1)
+
+        residual = q
+
+        # Project only the new query
+        q_proj = self.w_qs(q).view(sz_b, len_q, n_head, d_k).transpose(1, 2)  # (B, n_head, 1, d_k)
+        k_proj = self.w_ks(q).view(sz_b, len_q, n_head, d_k).transpose(1, 2)  # (B, n_head, 1, d_k)
+        v_proj = self.w_vs(q).view(sz_b, len_q, n_head, d_v).transpose(1, 2)  # (B, n_head, 1, d_v)
+
+        # Concatenate with cache
+        if k_cache is not None and k_cache.shape[2] > 0:
+            k = torch.cat([k_cache, k_proj], dim=2)  # (B, n_head, L_cache+1, d_k)
+            v = torch.cat([v_cache, v_proj], dim=2)  # (B, n_head, L_cache+1, d_v)
+        else:
+            k = k_proj
+            v = v_proj
+
+        if mask is not None:
+            mask = mask.unsqueeze(1)   # For head axis broadcasting.
+
+        q, attn = self.attention(q_proj, k, v, mask=mask)
+
+        # Transpose to move the head dimension back: b x lq x n x dv
+        # Combine the last two dimensions to concatenate all the heads together: b x lq x (n*dv)
+        q = q.transpose(1, 2).contiguous().view(sz_b, len_q, -1)
+        q = self.dropout(self.fc(q))
+        q += residual
+
+        q = self.layer_norm(q)
+
+        return q, attn, k_proj, v_proj
 
 
 class PositionwiseFeedForward(nn.Module):
@@ -142,6 +188,23 @@ class AttentionBlockKVCache(nn.Module):
         output, attn = self.slf_attn(q, k, v, mask=slf_attn_mask)
         output = self.pos_ffn(output)
         return output, attn
+    
+    def forward_with_kv_cache(self, q, k_cache, v_cache, slf_attn_mask=None):
+        """
+        Forward with KV cache (efficient version).
+        Args:
+            q: new input (B, 1, D)
+            k_cache: cached keys (B, n_head, L_cache, d_k)
+            v_cache: cached values (B, n_head, L_cache, d_v)
+        Returns:
+            output: (B, 1, D)
+            attn: attention weights
+            new_k: new projected key (B, n_head, 1, d_k)
+            new_v: new projected value (B, n_head, 1, d_v)
+        """
+        output, attn, new_k, new_v = self.slf_attn.forward_with_kv_cache(q, k_cache, v_cache, mask=slf_attn_mask)
+        output = self.pos_ffn(output)
+        return output, attn, new_k, new_v
 
 
 class PositionalEncoding1D(nn.Module):
