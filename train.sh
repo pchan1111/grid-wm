@@ -1,7 +1,7 @@
-env_name=Seaquest
+env_name=MsPacman
 seed=1
 python -u train.py \
-    -n "${env_name}-life_done-wm_2L512D8H-100k-bf16-seed${seed}" \
+    -n "Gym(0.27.1)-${env_name}-life_done-wm_2L512D8H-100k-bf16-seed${seed}" \
     -seed ${seed} \
     -config_path "config_files/STORM.yaml" \
     -env_name "ALE/${env_name}-v5" \
