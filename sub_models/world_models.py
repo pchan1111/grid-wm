@@ -312,7 +312,7 @@ class WorldModel(nn.Module):
             last_dist_feat = self.storm_transformer.forward_with_kv_cache(latent, action)
             
             # Get prior sample
-            prior_logits = self.dist_head.forward_prior(last_dist_feat)
+            prior_logits = self.dist_head.forward_prior(last_dist_feat) # (B, 1, stoch_dim, stoch_dim)
             prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
             prior_flattened_sample = self.flatten_sample(prior_sample)
         return prior_flattened_sample, last_dist_feat
