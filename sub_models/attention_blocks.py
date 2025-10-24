@@ -95,6 +95,33 @@ class MultiHeadAttention(nn.Module):
 
         return q, attn
 
+    def forward_with_kv_cache(self, q, k_cache, v_cache, idx):
+        d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
+        sz_b = q.size(0)
+
+        residual = q
+
+        # Pass through the pre-attention projection: b x lq x (n*dv)
+        # Separate different heads: b x lq x n x dv
+        q = self.w_qs(residual).view(sz_b, 1, n_head, d_k).transpose(1, 2) # b x n x 1 x dk
+        k = self.w_ks(residual).view(sz_b, 1, n_head, d_k).transpose(1, 2) 
+        v = self.w_vs(residual).view(sz_b, 1, n_head, d_v).transpose(1, 2)
+
+        k_cache[idx] = torch.cat([k_cache[idx], k], dim=2)
+        v_cache[idx] = torch.cat([v_cache[idx], v], dim=2)
+
+        q, attn = self.attention(q, k_cache[idx], v_cache[idx], mask=None)
+
+        # Transpose to move the head dimension back: b x lq x n x dv
+        # Combine the last two dimensions to concatenate all the heads together: b x lq x (n*dv)
+        q = q.transpose(1, 2).contiguous().view(sz_b, 1, -1)
+        q = self.dropout(self.fc(q))
+        q += residual
+
+        q = self.layer_norm(q)
+
+        return q, attn
+
 
 class PositionwiseFeedForward(nn.Module):
     ''' A two-feed-forward-layer module '''
@@ -140,6 +167,11 @@ class AttentionBlockKVCache(nn.Module):
 
     def forward(self, q, k, v, slf_attn_mask=None):
         output, attn = self.slf_attn(q, k, v, mask=slf_attn_mask)
+        output = self.pos_ffn(output)
+        return output, attn
+
+    def forward_with_kv_cache(self, q, k_cache, v_cache, idx):
+        output, attn = self.slf_attn.forward_with_kv_cache(q, k_cache, v_cache, idx)
         output = self.pos_ffn(output)
         return output, attn
 

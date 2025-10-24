@@ -294,24 +294,44 @@ class WorldModel(nn.Module):
             prior_flattened_sample = self.flatten_sample(prior_sample)
         return prior_flattened_sample, last_dist_feat
 
-    def predict_next(self, last_flattened_sample, action, log_video=True):
+    def calc_last_dist_feat_with_kv_cache(self, latent, action):
+        """
+        Calculate dist_feat using KV cache (efficient for single token).
+        KV cache should be already initialized and built up to the previous step.
+        
+        Args:
+            latent: (B, 1, D) - single token latent
+            action: (B, 1) - single action
+        
+        Returns:
+            prior_flattened_sample: (B, 1, stoch_dim*stoch_dim)
+            last_dist_feat: (B, 1, transformer_hidden_dim)
+        """
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
-            dist_feat = self.storm_transformer.forward_with_kv_cache(last_flattened_sample, action)
-            prior_logits = self.dist_head.forward_prior(dist_feat)
-
-            # decoding
+            # Use KV cache to process only the new token
+            last_dist_feat = self.storm_transformer.forward_with_kv_cache(latent, action)
+            
+            # Get prior sample
+            prior_logits = self.dist_head.forward_prior(last_dist_feat)
             prior_sample = self.straight_throught_gradient(prior_logits, sample_mode="random_sample")
             prior_flattened_sample = self.flatten_sample(prior_sample)
+        return prior_flattened_sample, last_dist_feat
+
+    def predict_next(self, last_flattened_sample, action, log_video=True):
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=self.use_amp):
+            prior_flattened_sample, last_dist_feat = self.calc_last_dist_feat_with_kv_cache(
+                last_flattened_sample, action
+            )
             if log_video:
                 obs_hat = self.image_decoder(prior_flattened_sample)
             else:
                 obs_hat = None
-            reward_hat = self.reward_decoder(dist_feat)
+            reward_hat = self.reward_decoder(last_dist_feat)
             reward_hat = self.symlog_twohot_loss_func.decode(reward_hat)
-            termination_hat = self.termination_decoder(dist_feat)
+            termination_hat = self.termination_decoder(last_dist_feat)
             termination_hat = termination_hat > 0
 
-        return obs_hat, reward_hat, termination_hat, prior_flattened_sample, dist_feat
+        return obs_hat, reward_hat, termination_hat, prior_flattened_sample, last_dist_feat
 
     def straight_throught_gradient(self, logits, sample_mode="random_sample"):
         dist = OneHotCategorical(logits=logits)
